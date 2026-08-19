@@ -69,8 +69,8 @@ Ne jamais sauter plusieurs étapes d'un coup. Ne jamais scaffolder/modifier en m
 
 - **W0 — Audit repo** ✅ *(terminé : repo quasi vide, `develop`/`main` identiques, Node v24.14.1, npm 11.11.0)*
 - **W1 — Shell / Design / RBAC** ✅ *(terminé : scaffold, design tokens v3, layout staff, login shell, navigation filtrée par rôle, composants loading/error/empty)*
-- **W2 — API / Auth / Erreurs** *(prochaine étape)* : client API typé, auth + refresh token, mapping `error.code` sur vraies erreurs backend, mocks alignés sur l'OpenAPI (43 paths cibles).
-- **W3 — Catalogue + premier vertical slice** : Admin crée un produit → API/DB → visible côté Mobile.
+- **W2 — API / Auth / Erreurs** ✅ *(terminé : client API typé + mocks + mapping error.code, auth mock login/logout/token, routes staff protégées)*
+- **W3 — Catalogue + premier vertical slice** *(prochaine étape)* : Admin crée un produit → API/DB → visible côté Mobile.
 - **W4 — Orders dashboard** : liste/détail des commandes, états, actions selon permissions.
 - **W5 — POS MVP** : session caisse, scanner universel, panier, QR commande, paiement CASH/TPE, ticket.
 - **W6 — KDS** : file des commandes payées, Commencer/Prête, temps réel.
@@ -92,7 +92,7 @@ Ne jamais sauter à une étape avancée (ex. W12) parce qu'elle est visuellement
 - Comportement conforme à la règle métier (state machine, permissions).
 - Endpoint/contrat correct (ou mock explicitement marqué comme tel).
 - Permission correcte (RBAC frontend + attente 403 backend).
-- États loading / empty / error (par `code`) / succès gérés — réutiliser les composants `src/components/states/*` créés en W1.
+- États loading / empty / error (par `code`) / succès gérés — réutiliser les composants `src/components/states/*`.
 - Double-submit protégé si action critique.
 - Données rafraîchies depuis le serveur après mutation.
 - `npm run dev` vérifié visuellement par Hamza (design, couleurs, comportement, y compris thème sombre après F5).
@@ -116,16 +116,25 @@ Ne jamais sauter à une étape avancée (ex. W12) parce qu'elle est visuellement
 
 ## 7. Ce qui existe déjà (repères pour Claude Code)
 
-- `src/lib/roles.ts` — types `Role` (10 rôles) + mapping section de nav → rôles autorisés (marqué comme proposition frontend à valider avec la permissions matrix backend officielle).
-- `src/lib/role-context.tsx` — `RoleProvider`/`useRole`, persistance localStorage, rôle actif simulé en dev.
+**Design / layout (W1)**
+- `src/lib/roles.ts` — types `Role` (10 rôles) + mapping section de nav → rôles autorisés (proposition frontend, à valider avec la permissions matrix backend officielle).
+- `src/lib/role-context.tsx` — `RoleProvider`/`useRole` (via `useSyncExternalStore`), persistance localStorage, rôle simulé en dev, expose `setInitialRoleFromAuth` (n'écrase pas un rôle déjà choisi manuellement).
 - `src/components/role-switcher.tsx` — dropdown "MODE DEV" dans la barre du haut.
 - `src/components/staff-nav.tsx` — nav du layout staff, filtrée par rôle.
-- `src/components/theme-toggle.tsx` — toggle clair/sombre, persistance localStorage, init SSR-safe (pas de `setState` dans un `useEffect`).
-- `src/lib/error-messages.ts` — mapping `error.code` → message FR (codes du cahier des charges : UNAUTHORIZED, PERMISSION_DENIED, CONCURRENT_MODIFICATION, OUT_OF_STOCK, INVALID_ORDER_STATUS, PAYMENT_ALREADY_COMPLETED, PAYMENT_NOT_REFUNDABLE, INVALID_QR, FOOD_PASS_LOST, MEAL_ALREADY_USED, POS_SESSION_NOT_OPEN, CASH_DIFFERENCE_REASON_REQUIRED, RATE_LIMITED, INTERNAL_ERROR).
-- `src/components/states/loading-state.tsx`, `empty-state.tsx`, `error-state.tsx` — composants génériques réutilisables, `error-state` piloté par `code` uniquement (jamais par `message`), `traceId` optionnel sans stack trace.
-- `src/app/(staff)/layout.tsx` — layout staff (rail nav + barre du haut + ticket rail).
-- `src/app/(staff)/dashboard/page.tsx` — dashboard avec cartes de statut simulées + section démo des états UI (à retirer avant W3).
-- `src/app/login/page.tsx` — formulaire de login, UI uniquement, pas d'auth réelle encore.
+- `src/components/theme-toggle.tsx` — toggle clair/sombre, persistance localStorage, init SSR-safe.
+- `src/components/states/loading-state.tsx`, `empty-state.tsx`, `error-state.tsx` — composants génériques réutilisables, `error-state` piloté par `code` uniquement, `traceId` optionnel sans stack trace.
+- `src/app/(staff)/layout.tsx` — layout staff (rail nav + barre du haut + ticket rail), garde d'authentification, bouton Déconnexion.
+- `src/app/(staff)/dashboard/page.tsx` — dashboard avec cartes de statut simulées.
+
+**API / Auth (W2)**
+- `src/lib/api/types.ts` — `ApiError` / `ApiResult<T>`.
+- `src/lib/api/client.ts` — `apiFetch<T>`, bascule mock/live via `NEXT_PUBLIC_API_MODE`, ne throw jamais, mappe les erreurs HTTP vers `ApiError`.
+- `src/lib/api/mocks/index.ts` — handlers mock (`/api/v1/health`, `/api/v1/orders`, `/api/v1/auth/login`, endpoint démo `OUT_OF_STOCK`) — **mocks de dev, ne reflètent pas forcément le vrai contrat OpenAPI**.
+- `src/lib/api/use-api.ts` — hook `useApiQuery<T>`.
+- `src/lib/error-messages.ts` — mapping `error.code` → message FR (14 codes du cahier des charges).
+- `src/lib/auth/auth-context.tsx` — `AuthProvider`/`useAuth` (via `useSyncExternalStore`), token en `localStorage`, `login`/`logout`, synchronise le rôle actif au login **si aucun rôle n'est déjà choisi manuellement** — **auth 100% mock, à remplacer par le vrai JWT/refresh backend**.
+- `src/app/login/page.tsx` — formulaire connecté à `useAuth().login()`, anti double-soumission, redirection vers `/dashboard`.
+- `.env.local.example` — `NEXT_PUBLIC_API_MODE`, `NEXT_PUBLIC_API_URL` documentés.
 
 ---
 
@@ -135,14 +144,13 @@ Ne jamais sauter à une étape avancée (ex. W12) parce qu'elle est visuellement
 Project: SUP2I FOOD
 Repo: sup2i-food-web (GitHub: maskmohammed/sup2i-food-web, privé)
 Base branch: develop
-Working branch: (à définir pour W2)
-Current milestone: W1 — Shell / Design / RBAC ✅ TERMINÉ. Prochaine étape : W2 — API / Auth / Erreurs
+Working branch: (à définir pour W3)
+Current milestone: W2 — API / Auth / Erreurs ✅ TERMINÉ. Prochaine étape : W3 — Catalogue + premier vertical slice
 Completed:
 - W0: audit repo terminé
-- Scaffold Next.js (TypeScript, App Router, src/, Tailwind, alias @/*) — mergé sur develop
-- Design tokens (couleurs v3 marine/magenta, IBM Plex Sans/Mono) + layout staff + toggle thème sombre/clair persistant + login shell — mergé sur develop
-- Navigation filtrée par rôle (sélecteur dev, 10 rôles) — mergé sur develop
-- Composants loading/error/empty réutilisables + mapping error.code — mergé sur develop
+- W1: scaffold + design tokens v3 + layout staff + login shell + navigation par rôle + états loading/error/empty — mergé sur develop
+- W2.1: client API typé + mocks + mapping error.code — mergé sur develop
+- W2.2: auth mock (login/logout/token) + routes staff protégées — mergé sur develop
 Validated:
 - lint: OK
 - typecheck: OK (via build)
@@ -153,8 +161,9 @@ Backend dependencies:
 - pending: JWT/RBAC réel, endpoints métier (43 paths cibles, pas tous implémentés)
 Open decisions:
 - Cactus/PHP: audit non démarré
+- Auth actuelle 100% mock — à remplacer par vrai JWT/refresh backend quand disponible (localStorage à revoir vers cookie httpOnly à ce moment-là)
 Next exact action:
-- Démarrer W2: client API typé, auth + refresh token, brancher error-state.tsx sur les vraies erreurs backend, mocks alignés sur l'OpenAPI
+- Démarrer W3: Admin crée un produit (catalogue) → passe par le client API existant → premier vertical slice de bout en bout
 ```
 
 *(Ce bloc doit être mis à jour à chaque étape validée — ne jamais écrire "terminé" sans exécution réelle des validations.)*
