@@ -17,7 +17,7 @@ import type {
   CreatedOrder,
   PaymentMethod,
 } from "../pos-types";
-import type { StockItem, StockMovement } from "../inventory-types";
+import type { StockItem, StockMovement, WasteReason } from "../inventory-types";
 
 // État en mémoire du module — se réinitialise au reload, pas de vraie
 // persistance tant que le backend n'expose pas /api/v1/orders.
@@ -332,8 +332,113 @@ function handleGetStockMovements(stockItemId: string): ApiResult<StockMovement[]
   return { ok: true, data: movements };
 }
 
+const WASTE_REASONS: WasteReason[] = ["EXPIRED", "DAMAGED", "PREPARATION_ERROR", "OTHER"];
+
+function isWasteReason(value: unknown): value is WasteReason {
+  return typeof value === "string" && (WASTE_REASONS as string[]).includes(value);
+}
+
+type StockWasteRequestBody = { quantity?: unknown; wasteReason?: unknown; note?: unknown };
+
+/** Même contrainte que l'ajustement : jamais de résultat sous 0. */
+function handleWasteStock(stockItemId: string, options?: RequestInit): ApiResult<StockItem> {
+  const item = stockItems.find((candidate) => candidate.id === stockItemId);
+  if (!item) {
+    return {
+      ok: false,
+      error: { code: "INTERNAL_ERROR", message: getErrorMessage("INTERNAL_ERROR"), status: 404 },
+    };
+  }
+
+  const body = parseJsonBody<StockWasteRequestBody>(options);
+  const quantity =
+    typeof body?.quantity === "number" && Number.isFinite(body.quantity) && body.quantity > 0
+      ? body.quantity
+      : null;
+  const wasteReason = isWasteReason(body?.wasteReason) ? body.wasteReason : null;
+  const note = typeof body?.note === "string" && body.note.trim() ? body.note.trim() : undefined;
+
+  if (quantity === null || !wasteReason) {
+    return {
+      ok: false,
+      error: { code: "VALIDATION_ERROR", message: getErrorMessage("VALIDATION_ERROR"), status: 422 },
+    };
+  }
+
+  const quantityDelta = -quantity;
+  const nextQuantity = item.quantityOnHand + quantityDelta;
+  if (nextQuantity < 0) {
+    return {
+      ok: false,
+      error: { code: "VALIDATION_ERROR", message: getErrorMessage("VALIDATION_ERROR"), status: 422 },
+    };
+  }
+
+  item.quantityOnHand = nextQuantity;
+
+  const movement: StockMovement = {
+    id: `mov_${Math.random().toString(36).slice(2, 10)}`,
+    stockItemId: item.id,
+    type: "WASTE",
+    quantityDelta,
+    reason: note ? `${wasteReason} — ${note}` : wasteReason,
+    createdAt: new Date().toISOString(),
+    createdBy: "Staff (mode dev)",
+  };
+  stockMovements = [movement, ...stockMovements];
+
+  return { ok: true, data: item };
+}
+
+type StockReceiveRequestBody = { quantity?: unknown };
+
+/** Pas de motif requis — une réception n'est pas une correction manuelle. */
+function handleReceiveStock(stockItemId: string, options?: RequestInit): ApiResult<StockItem> {
+  const item = stockItems.find((candidate) => candidate.id === stockItemId);
+  if (!item) {
+    return {
+      ok: false,
+      error: { code: "INTERNAL_ERROR", message: getErrorMessage("INTERNAL_ERROR"), status: 404 },
+    };
+  }
+
+  const body = parseJsonBody<StockReceiveRequestBody>(options);
+  const quantity =
+    typeof body?.quantity === "number" && Number.isFinite(body.quantity) && body.quantity > 0
+      ? body.quantity
+      : null;
+
+  if (quantity === null) {
+    return {
+      ok: false,
+      error: { code: "VALIDATION_ERROR", message: getErrorMessage("VALIDATION_ERROR"), status: 422 },
+    };
+  }
+
+  item.quantityOnHand += quantity;
+
+  const movement: StockMovement = {
+    id: `mov_${Math.random().toString(36).slice(2, 10)}`,
+    stockItemId: item.id,
+    type: "RECEIPT",
+    quantityDelta: quantity,
+    createdAt: new Date().toISOString(),
+    createdBy: "Staff (mode dev)",
+  };
+  stockMovements = [movement, ...stockMovements];
+
+  return { ok: true, data: item };
+}
+
+function handleGetStockAlerts(): ApiResult<StockItem[]> {
+  const alerts = stockItems.filter((item) => item.quantityOnHand <= item.lowStockThreshold);
+  return { ok: true, data: alerts };
+}
+
 const STOCK_ADJUST_PATTERN = /^\/api\/v1\/inventory\/items\/([^/]+)\/adjust$/;
 const STOCK_MOVEMENTS_PATTERN = /^\/api\/v1\/inventory\/items\/([^/]+)\/movements$/;
+const STOCK_WASTE_PATTERN = /^\/api\/v1\/inventory\/items\/([^/]+)\/waste$/;
+const STOCK_RECEIVE_PATTERN = /^\/api\/v1\/inventory\/items\/([^/]+)\/receive$/;
 
 function handleGetOrder(id: string): ApiResult<Order> {
   const order = orders.find((candidate) => candidate.id === id);
@@ -608,6 +713,7 @@ const mockHandlers: Record<string, MockHandler> = {
   "POST /api/v1/pos/session/close": handleCloseSession,
 
   "GET /api/v1/inventory/items": () => ({ ok: true, data: stockItems }),
+  "GET /api/v1/inventory/alerts": handleGetStockAlerts,
 };
 
 export function resolveMock<T>(path: string, options?: RequestInit): ApiResult<T> {
@@ -626,6 +732,12 @@ export function resolveMock<T>(path: string, options?: RequestInit): ApiResult<T
 
     const adjustMatch = path.match(STOCK_ADJUST_PATTERN);
     if (adjustMatch) return handleAdjustStock(adjustMatch[1], options) as ApiResult<T>;
+
+    const wasteMatch = path.match(STOCK_WASTE_PATTERN);
+    if (wasteMatch) return handleWasteStock(wasteMatch[1], options) as ApiResult<T>;
+
+    const receiveMatch = path.match(STOCK_RECEIVE_PATTERN);
+    if (receiveMatch) return handleReceiveStock(receiveMatch[1], options) as ApiResult<T>;
   }
 
   const handler = mockHandlers[`${method} ${path}`];

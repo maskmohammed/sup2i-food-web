@@ -1,3 +1,5 @@
+import { StockAlertsCard } from "./stock-alerts-card";
+
 const statusCards: { label: string; value: number; colorClass: string }[] = [
   { label: "En attente", value: 3, colorClass: "bg-status-queued" },
   { label: "En préparation", value: 2, colorClass: "bg-status-preparing" },
@@ -31,6 +33,7 @@ export default function DashboardPage() {
             </div>
           </div>
         ))}
+        <StockAlertsCard />
       </div>
     </div>
   );

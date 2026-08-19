@@ -18,3 +18,12 @@ export type StockMovement = {
   createdAt: string;
   createdBy: string;
 };
+
+export type WasteReason = "EXPIRED" | "DAMAGED" | "PREPARATION_ERROR" | "OTHER";
+
+export const WASTE_REASON_LABELS: Record<WasteReason, string> = {
+  EXPIRED: "Périmé",
+  DAMAGED: "Endommagé",
+  PREPARATION_ERROR: "Erreur de préparation",
+  OTHER: "Autre",
+};
