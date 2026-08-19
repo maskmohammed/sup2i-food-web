@@ -1,150 +1,37 @@
 import type { ReactNode } from "react";
-import Link from "next/link";
+import { RoleProvider } from "@/lib/role-context";
+import { RoleSwitcher } from "@/components/role-switcher";
+import { StaffNav } from "@/components/staff-nav";
 import { ThemeToggle } from "@/components/theme-toggle";
-
-function NavIcon({ children }: { children: ReactNode }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={1.5}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className="h-5 w-5 flex-none"
-      aria-hidden="true"
-    >
-      {children}
-    </svg>
-  );
-}
-
-const navItems: { label: string; href: string; icon: ReactNode }[] = [
-  {
-    label: "Dashboard",
-    href: "/dashboard",
-    icon: (
-      <NavIcon>
-        <rect x="3" y="3" width="7" height="7" rx="1" />
-        <rect x="14" y="3" width="7" height="7" rx="1" />
-        <rect x="3" y="14" width="7" height="7" rx="1" />
-        <rect x="14" y="14" width="7" height="7" rx="1" />
-      </NavIcon>
-    ),
-  },
-  {
-    label: "POS",
-    href: "/pos",
-    icon: (
-      <NavIcon>
-        <rect x="4" y="3" width="16" height="12" rx="2" />
-        <path d="M9 21h6" />
-        <path d="M12 17v4" />
-      </NavIcon>
-    ),
-  },
-  {
-    label: "KDS",
-    href: "/kds",
-    icon: (
-      <NavIcon>
-        <rect x="3" y="4" width="18" height="12" rx="2" />
-        <path d="M8 20h8" />
-        <path d="M7 8h6M7 11h4" />
-      </NavIcon>
-    ),
-  },
-  {
-    label: "Stock",
-    href: "/stock",
-    icon: (
-      <NavIcon>
-        <path d="M21 8l-9-5-9 5 9 5 9-5z" />
-        <path d="M3 8v8l9 5 9-5V8" />
-        <path d="M12 13v8" />
-      </NavIcon>
-    ),
-  },
-  {
-    label: "Cantine",
-    href: "/cantine",
-    icon: (
-      <NavIcon>
-        <path d="M6 3v7a2 2 0 0 0 4 0V3" />
-        <path d="M8 10v11" />
-        <path d="M16 3c-1.5 0-2 2-2 4s.5 4 2 4v10" />
-      </NavIcon>
-    ),
-  },
-  {
-    label: "Administration",
-    href: "/administration",
-    icon: (
-      <NavIcon>
-        <circle cx="12" cy="12" r="3" />
-        <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 0 1-4 0v-.09a1.7 1.7 0 0 0-1-1.55 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.55-1H3a2 2 0 0 1 0-4h.09a1.7 1.7 0 0 0 1.55-1 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34H9a1.7 1.7 0 0 0 1-1.55V3a2 2 0 0 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87V9a1.7 1.7 0 0 0 1.55 1H21a2 2 0 0 1 0 4h-.09a1.7 1.7 0 0 0-1.55 1z" />
-      </NavIcon>
-    ),
-  },
-  {
-    label: "Direction",
-    href: "/direction",
-    icon: (
-      <NavIcon>
-        <path d="M3 3v18h18" />
-        <path d="M7 13v5" />
-        <path d="M12 9v9" />
-        <path d="M17 5v13" />
-      </NavIcon>
-    ),
-  },
-];
 
 export default function StaffLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="flex min-h-screen">
-      <aside className="flex w-56 flex-none flex-col gap-1 bg-surface p-4">
-        <p className="px-3 pb-4 text-sm font-semibold tracking-tight text-brand">
-          SUP2I Food
-        </p>
-        <nav className="flex flex-col gap-1">
-          {navItems.map((item) =>
-            item.href === "/dashboard" ? (
-              <Link
-                key={item.href}
-                href="/dashboard"
-                className="flex items-center gap-3 rounded-md px-3 py-2 text-sm text-text-muted transition-colors hover:bg-surface-raised hover:text-text"
-              >
-                {item.icon}
-                <span>{item.label}</span>
-              </Link>
-            ) : (
-              <a
-                key={item.href}
-                href={item.href}
-                className="flex items-center gap-3 rounded-md px-3 py-2 text-sm text-text-muted transition-colors hover:bg-surface-raised hover:text-text"
-              >
-                {item.icon}
-                <span>{item.label}</span>
-              </a>
-            ),
-          )}
-        </nav>
-      </aside>
+    <RoleProvider>
+      <div className="flex min-h-screen">
+        <aside className="flex w-56 flex-none flex-col gap-1 bg-surface p-4">
+          <p className="px-3 pb-4 text-sm font-semibold tracking-tight text-brand">
+            SUP2I Food
+          </p>
+          <StaffNav />
+        </aside>
 
-      <div aria-hidden className="w-0 flex-none border-l-2 border-dashed border-border" />
+        <div aria-hidden className="w-0 flex-none border-l-2 border-dashed border-border" />
 
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex items-center justify-between border-b border-border bg-surface px-6 py-3">
-          <div>
-            <p className="text-sm font-medium text-text">Hamza K.</p>
-            <p className="text-xs text-text-muted">Session ouverte</p>
-          </div>
-          <ThemeToggle />
-        </header>
+        <div className="flex min-w-0 flex-1 flex-col">
+          <header className="flex items-center justify-between border-b border-border bg-surface px-6 py-3">
+            <div>
+              <p className="text-sm font-medium text-text">Hamza K.</p>
+              <p className="text-xs text-text-muted">Session ouverte</p>
+            </div>
+            <div className="flex items-center gap-3">
+              <RoleSwitcher />
+              <ThemeToggle />
+            </div>
+          </header>
 
-        <main className="flex-1 bg-bg p-6">{children}</main>
+          <main className="flex-1 bg-bg p-6">{children}</main>
+        </div>
       </div>
-    </div>
+    </RoleProvider>
   );
 }
