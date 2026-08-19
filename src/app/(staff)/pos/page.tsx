@@ -6,12 +6,24 @@ import { useApiQuery } from "@/lib/api/use-api";
 import { LoadingState } from "@/components/states/loading-state";
 import { EmptyState } from "@/components/states/empty-state";
 import { ErrorState } from "@/components/states/error-state";
+import { CloseSessionPanel } from "./close-session-panel";
 import type { ApiError } from "@/lib/api/types";
 import type { Product } from "@/lib/api/catalogue-types";
-import type { CartPriceResult, CashSession, CreatedOrder, PaymentMethod } from "@/lib/api/pos-types";
+import type {
+  CartPriceResult,
+  CashSession,
+  CashSessionClosure,
+  CreatedOrder,
+  PaymentMethod,
+} from "@/lib/api/pos-types";
 
 type CartLine = { productId: string; quantity: number };
 type PricingStatus = "idle" | "loading" | "success" | "error";
+type ClosureRecap = {
+  closure: CashSessionClosure;
+  openingCashCents: number;
+  cardSalesCents: number | null;
+};
 
 const DEBOUNCE_MS = 300;
 
@@ -38,6 +50,9 @@ export default function PosPage() {
     refetch: refetchSession,
   } = useApiQuery<CashSession | null>("/api/v1/pos/session/current");
 
+  const [previousSessionClosed, setPreviousSessionClosed] = useState(false);
+  const [closureRecap, setClosureRecap] = useState<ClosureRecap | null>(null);
+
   if (sessionStatus === "loading") {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
@@ -60,14 +75,41 @@ export default function PosPage() {
     );
   }
 
-  if (!session) {
-    return <OpenSessionScreen onOpened={refetchSession} />;
+  if (closureRecap) {
+    return (
+      <SessionClosedRecap
+        recap={closureRecap}
+        onContinue={() => {
+          setClosureRecap(null);
+          setPreviousSessionClosed(true);
+          refetchSession();
+        }}
+      />
+    );
   }
 
-  return <PosWorkspace session={session} />;
+  if (!session) {
+    return (
+      <OpenSessionScreen
+        previousSessionClosed={previousSessionClosed}
+        onOpened={() => {
+          setPreviousSessionClosed(false);
+          refetchSession();
+        }}
+      />
+    );
+  }
+
+  return <PosWorkspace session={session} onSessionClosed={setClosureRecap} />;
 }
 
-function OpenSessionScreen({ onOpened }: { onOpened: () => void }) {
+function OpenSessionScreen({
+  previousSessionClosed,
+  onOpened,
+}: {
+  previousSessionClosed: boolean;
+  onOpened: () => void;
+}) {
   const [openingCashInput, setOpeningCashInput] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
@@ -98,9 +140,13 @@ function OpenSessionScreen({ onOpened }: { onOpened: () => void }) {
   return (
     <div className="flex min-h-[60vh] items-center justify-center">
       <div className="w-full max-w-sm rounded-lg border border-border bg-surface-raised p-6">
-        <h1 className="text-lg font-semibold text-text">Ouvrir une session de caisse</h1>
+        <h1 className="text-lg font-semibold text-text">
+          {previousSessionClosed ? "Session précédente clôturée" : "Ouvrir une session de caisse"}
+        </h1>
         <p className="mt-1 text-sm text-text-muted">
-          Une session de caisse doit être ouverte avant de pouvoir vendre.
+          {previousSessionClosed
+            ? "Ouvrez une nouvelle session pour continuer."
+            : "Une session de caisse doit être ouverte avant de pouvoir vendre."}
         </p>
 
         <form onSubmit={handleSubmit} className="mt-6 flex flex-col gap-4">
@@ -135,7 +181,78 @@ function OpenSessionScreen({ onOpened }: { onOpened: () => void }) {
   );
 }
 
-function TicketScreen({ order, onNewSale }: { order: CreatedOrder; onNewSale: () => void }) {
+function SessionClosedRecap({ recap, onContinue }: { recap: ClosureRecap; onContinue: () => void }) {
+  const cashSalesCents = recap.closure.expectedCashCents - recap.openingCashCents;
+  const differenceLabel =
+    (recap.closure.differenceCents > 0 ? "+" : "") + formatPrice(recap.closure.differenceCents);
+
+  return (
+    <div className="flex min-h-[60vh] items-center justify-center">
+      <div className="w-full max-w-sm rounded-lg border border-border bg-surface-raised p-6">
+        <h1 className="text-lg font-semibold text-text">Session clôturée</h1>
+
+        <dl className="mt-4 flex flex-col gap-1.5 text-sm">
+          <div className="flex justify-between">
+            <dt className="text-text-muted">Fond initial</dt>
+            <dd className="font-mono text-text">{formatPrice(recap.openingCashCents)}</dd>
+          </div>
+          <div className="flex justify-between">
+            <dt className="text-text-muted">Ventes espèces</dt>
+            <dd className="font-mono text-text">{formatPrice(cashSalesCents)}</dd>
+          </div>
+          {recap.cardSalesCents !== null ? (
+            <div className="flex justify-between">
+              <dt className="text-text-muted">Ventes TPE</dt>
+              <dd className="font-mono text-text">{formatPrice(recap.cardSalesCents)}</dd>
+            </div>
+          ) : null}
+          <div className="flex justify-between border-t border-border pt-1.5">
+            <dt className="text-text-muted">Attendu en caisse</dt>
+            <dd className="font-mono text-text">{formatPrice(recap.closure.expectedCashCents)}</dd>
+          </div>
+          <div className="flex justify-between">
+            <dt className="text-text-muted">Déclaré</dt>
+            <dd className="font-mono text-text">{formatPrice(recap.closure.declaredCashCents)}</dd>
+          </div>
+          <div className="flex justify-between border-t border-border pt-1.5">
+            <dt className="text-text-muted">Écart</dt>
+            <dd
+              className={`font-mono font-semibold ${
+                recap.closure.differenceCents === 0 ? "text-text" : "text-status-alert"
+              }`}
+            >
+              {differenceLabel}
+            </dd>
+          </div>
+          {recap.closure.reasonCode ? (
+            <div className="flex justify-between">
+              <dt className="text-text-muted">Motif</dt>
+              <dd className="text-text">{recap.closure.reasonCode}</dd>
+            </div>
+          ) : null}
+        </dl>
+
+        <button
+          type="button"
+          onClick={onContinue}
+          className="mt-6 w-full rounded-md bg-brand px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90"
+        >
+          Continuer
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function TicketScreen({
+  order,
+  rushMode,
+  onNewSale,
+}: {
+  order: CreatedOrder;
+  rushMode: boolean;
+  onNewSale: () => void;
+}) {
   return (
     <div className="flex min-h-[60vh] items-center justify-center">
       <div className="w-full max-w-sm rounded-lg border border-border bg-surface-raised p-6">
@@ -169,14 +286,20 @@ function TicketScreen({ order, onNewSale }: { order: CreatedOrder; onNewSale: ()
           onClick={onNewSale}
           className="mt-6 w-full rounded-md bg-brand px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90"
         >
-          Nouvelle vente
+          {rushMode ? "Suivant" : "Nouvelle vente"}
         </button>
       </div>
     </div>
   );
 }
 
-function PosWorkspace({ session }: { session: CashSession }) {
+function PosWorkspace({
+  session,
+  onSessionClosed,
+}: {
+  session: CashSession;
+  onSessionClosed: (recap: ClosureRecap) => void;
+}) {
   const {
     status: productsStatus,
     data: products,
@@ -189,11 +312,14 @@ function PosWorkspace({ session }: { session: CashSession }) {
   const [pricingStatus, setPricingStatus] = useState<PricingStatus>("idle");
   const [pricingError, setPricingError] = useState<ApiError | null>(null);
 
+  const [rushMode, setRushMode] = useState(false);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | null>(null);
   const [checkoutSubmitting, setCheckoutSubmitting] = useState(false);
   const [checkoutError, setCheckoutError] = useState<ApiError | null>(null);
   const [createdOrder, setCreatedOrder] = useState<CreatedOrder | null>(null);
+
+  const [closePanelOpen, setClosePanelOpen] = useState(false);
 
   function applyCartChange(next: CartLine[]) {
     setCart(next);
@@ -229,6 +355,13 @@ function PosWorkspace({ session }: { session: CashSession }) {
 
   function clearCart() {
     applyCartChange([]);
+    setCheckoutOpen(false);
+    setPaymentMethod(null);
+    setCheckoutError(null);
+  }
+
+  function toggleRushMode() {
+    setRushMode((prev) => !prev);
     setCheckoutOpen(false);
     setPaymentMethod(null);
     setCheckoutError(null);
@@ -284,15 +417,15 @@ function PosWorkspace({ session }: { session: CashSession }) {
     setCheckoutError(null);
   }
 
-  async function confirmPayment() {
-    if (!paymentMethod || checkoutSubmitting) return;
+  async function submitPayment(method: PaymentMethod) {
+    if (checkoutSubmitting) return;
 
     setCheckoutSubmitting(true);
     setCheckoutError(null);
 
     const result = await apiFetch<CreatedOrder>("/api/v1/pos/orders", {
       method: "POST",
-      body: JSON.stringify({ items: cart, paymentMethod }),
+      body: JSON.stringify({ items: cart, paymentMethod: method }),
     });
 
     setCheckoutSubmitting(false);
@@ -309,19 +442,40 @@ function PosWorkspace({ session }: { session: CashSession }) {
   }
 
   if (createdOrder) {
-    return <TicketScreen order={createdOrder} onNewSale={() => setCreatedOrder(null)} />;
+    return <TicketScreen order={createdOrder} rushMode={rushMode} onNewSale={() => setCreatedOrder(null)} />;
   }
 
   return (
     <div>
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-lg font-semibold text-text">POS</h1>
           <p className="mt-1 text-sm text-text-muted">Sélectionnez des produits pour composer la commande.</p>
         </div>
-        <p className="flex-none rounded-full border border-border bg-surface-raised px-3 py-1 text-xs text-text-muted">
-          Session ouverte — fond initial {formatPrice(session.openingCashCents)}
-        </p>
+        <div className="flex flex-none items-center gap-2">
+          <p className="rounded-full border border-border bg-surface-raised px-3 py-1 text-xs text-text-muted">
+            Session ouverte — fond initial {formatPrice(session.openingCashCents)}
+          </p>
+          <button
+            type="button"
+            onClick={toggleRushMode}
+            disabled={checkoutSubmitting}
+            className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors disabled:opacity-50 ${
+              rushMode
+                ? "border-accent-warm bg-accent-warm/10 text-accent-warm"
+                : "border-border bg-surface-raised text-text-muted hover:text-text"
+            }`}
+          >
+            Mode Rush {rushMode ? "activé" : "désactivé"}
+          </button>
+          <button
+            type="button"
+            onClick={() => setClosePanelOpen(true)}
+            className="rounded-full border border-border bg-surface-raised px-3 py-1 text-xs text-text-muted transition-colors hover:text-text"
+          >
+            Clôturer la session
+          </button>
+        </div>
       </div>
 
       <div className="mt-6 flex gap-6">
@@ -429,7 +583,29 @@ function PosWorkspace({ session }: { session: CashSession }) {
                 Vider le panier
               </button>
 
-              {!checkoutOpen ? (
+              {rushMode ? (
+                <div className="mt-2 flex flex-col gap-2">
+                  <button
+                    type="button"
+                    onClick={() => submitPayment("CASH")}
+                    disabled={checkoutSubmitting}
+                    className="w-full rounded-md bg-brand px-3 py-3 text-base font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {checkoutSubmitting ? "Encaissement..." : "Payer — Espèces"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => submitPayment("CARD")}
+                    disabled={checkoutSubmitting}
+                    className="w-full rounded-md bg-brand px-3 py-3 text-base font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {checkoutSubmitting ? "Encaissement..." : "Payer — TPE"}
+                  </button>
+                  {checkoutError ? (
+                    <ErrorState code={checkoutError.code} traceId={checkoutError.traceId} />
+                  ) : null}
+                </div>
+              ) : !checkoutOpen ? (
                 <button
                   type="button"
                   onClick={startCheckout}
@@ -472,7 +648,7 @@ function PosWorkspace({ session }: { session: CashSession }) {
                     </button>
                     <button
                       type="button"
-                      onClick={confirmPayment}
+                      onClick={() => paymentMethod && submitPayment(paymentMethod)}
                       disabled={!paymentMethod || checkoutSubmitting}
                       className="flex-1 rounded-md bg-brand px-3 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                     >
@@ -485,6 +661,21 @@ function PosWorkspace({ session }: { session: CashSession }) {
           )}
         </aside>
       </div>
+
+      {closePanelOpen ? (
+        <CloseSessionPanel
+          session={session}
+          onCancel={() => setClosePanelOpen(false)}
+          onClosed={(closure, summary) => {
+            setClosePanelOpen(false);
+            onSessionClosed({
+              closure,
+              openingCashCents: session.openingCashCents,
+              cardSalesCents: summary?.cardSalesCents ?? null,
+            });
+          }}
+        />
+      ) : null}
     </div>
   );
 }

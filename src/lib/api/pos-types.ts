@@ -28,3 +28,26 @@ export type CreatedOrder = {
   paymentMethod: PaymentMethod;
   paidAt: string;
 };
+
+export type CashSessionClosure = {
+  sessionId: string;
+  declaredCashCents: number;
+  expectedCashCents: number;
+  differenceCents: number;
+  reasonCode?: string;
+  closedAt: string;
+};
+
+/**
+ * Pas demandé explicitement dans le cahier des charges initial, mais
+ * nécessaire pour afficher le détail espèces/TPE avant clôture (le GET
+ * séparé évoqué comme option) — CashSessionClosure, lui, reste conforme
+ * à la forme spécifiée.
+ */
+export type CashSessionSummary = {
+  sessionId: string;
+  openingCashCents: number;
+  cashSalesCents: number;
+  cardSalesCents: number;
+  expectedCashCents: number;
+};

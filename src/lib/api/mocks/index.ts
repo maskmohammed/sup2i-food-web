@@ -8,7 +8,15 @@ import type { Role } from "@/lib/roles";
 import type { ApiResult } from "../types";
 import type { CreateProductInput, Product } from "../catalogue-types";
 import { ORDER_TRANSITIONS, type Order, type OrderStatus } from "../orders-types";
-import type { CartItem, CartPriceResult, CashSession, CreatedOrder, PaymentMethod } from "../pos-types";
+import type {
+  CartItem,
+  CartPriceResult,
+  CashSession,
+  CashSessionClosure,
+  CashSessionSummary,
+  CreatedOrder,
+  PaymentMethod,
+} from "../pos-types";
 
 // État en mémoire du module — se réinitialise au reload, pas de vraie
 // persistance tant que le backend n'expose pas /api/v1/orders.
@@ -271,6 +279,10 @@ function handleOrderTransition(id: string, options?: RequestInit): ApiResult<Ord
 // État en mémoire du module — une seule session à la fois, se réinitialise
 // au reload. Pas de vraie clôture avec écarts ici (prévue en W7).
 let currentSession: CashSession | null = null;
+// Ventes de la session courante, par mode de paiement — remises à zéro à
+// chaque ouverture. Servent à calculer le montant attendu en caisse.
+let sessionCashSalesCents = 0;
+let sessionCardSalesCents = 0;
 
 type SessionOpenRequestBody = { openingCashCents?: unknown };
 
@@ -303,6 +315,8 @@ function handleOpenSession(options?: RequestInit): ApiResult<CashSession> {
     openingCashCents,
     status: "OPEN",
   };
+  sessionCashSalesCents = 0;
+  sessionCardSalesCents = 0;
 
   return { ok: true, data: currentSession };
 }
@@ -362,6 +376,12 @@ function handleCreatePosOrder(options?: RequestInit): ApiResult<CreatedOrder> {
 
   orders.push(newOrder);
 
+  if (paymentMethod === "CASH") {
+    sessionCashSalesCents += newOrder.totalCents;
+  } else {
+    sessionCardSalesCents += newOrder.totalCents;
+  }
+
   return {
     ok: true,
     data: {
@@ -373,6 +393,83 @@ function handleCreatePosOrder(options?: RequestInit): ApiResult<CreatedOrder> {
       paidAt,
     },
   };
+}
+
+function handleSessionSummary(): ApiResult<CashSessionSummary> {
+  if (!currentSession || currentSession.status !== "OPEN") {
+    return {
+      ok: false,
+      error: { code: "POS_SESSION_NOT_OPEN", message: getErrorMessage("POS_SESSION_NOT_OPEN"), status: 409 },
+    };
+  }
+
+  return {
+    ok: true,
+    data: {
+      sessionId: currentSession.id,
+      openingCashCents: currentSession.openingCashCents,
+      cashSalesCents: sessionCashSalesCents,
+      cardSalesCents: sessionCardSalesCents,
+      expectedCashCents: currentSession.openingCashCents + sessionCashSalesCents,
+    },
+  };
+}
+
+type SessionCloseRequestBody = { declaredCashCents?: unknown; reasonCode?: unknown };
+
+function handleCloseSession(options?: RequestInit): ApiResult<CashSessionClosure> {
+  if (!currentSession || currentSession.status !== "OPEN") {
+    return {
+      ok: false,
+      error: { code: "POS_SESSION_NOT_OPEN", message: getErrorMessage("POS_SESSION_NOT_OPEN"), status: 409 },
+    };
+  }
+
+  const body = parseJsonBody<SessionCloseRequestBody>(options);
+  const declaredCashCents =
+    typeof body?.declaredCashCents === "number" &&
+    Number.isFinite(body.declaredCashCents) &&
+    body.declaredCashCents >= 0
+      ? body.declaredCashCents
+      : null;
+  const reasonCode =
+    typeof body?.reasonCode === "string" && body.reasonCode.trim() ? body.reasonCode.trim() : undefined;
+
+  if (declaredCashCents === null) {
+    return {
+      ok: false,
+      error: { code: "VALIDATION_ERROR", message: getErrorMessage("VALIDATION_ERROR"), status: 422 },
+    };
+  }
+
+  const expectedCashCents = currentSession.openingCashCents + sessionCashSalesCents;
+  const differenceCents = declaredCashCents - expectedCashCents;
+
+  if (differenceCents !== 0 && !reasonCode) {
+    return {
+      ok: false,
+      error: {
+        code: "CASH_DIFFERENCE_REASON_REQUIRED",
+        message: getErrorMessage("CASH_DIFFERENCE_REASON_REQUIRED"),
+        status: 422,
+      },
+    };
+  }
+
+  const closure: CashSessionClosure = {
+    sessionId: currentSession.id,
+    declaredCashCents,
+    expectedCashCents,
+    differenceCents,
+    reasonCode,
+    closedAt: new Date().toISOString(),
+  };
+
+  currentSession = null;
+  sessionCashSalesCents = 0;
+  sessionCardSalesCents = 0;
+
+  return { ok: true, data: closure };
 }
 
 const ORDER_DETAIL_PATTERN = /^\/api\/v1\/orders\/([^/]+)$/;
@@ -406,6 +503,9 @@ const mockHandlers: Record<string, MockHandler> = {
   "GET /api/v1/pos/session/current": () => ({ ok: true, data: currentSession }),
   "POST /api/v1/pos/session/open": handleOpenSession,
   "POST /api/v1/pos/orders": handleCreatePosOrder,
+
+  "GET /api/v1/pos/session/summary": handleSessionSummary,
+  "POST /api/v1/pos/session/close": handleCloseSession,
 };
 
 export function resolveMock<T>(path: string, options?: RequestInit): ApiResult<T> {
