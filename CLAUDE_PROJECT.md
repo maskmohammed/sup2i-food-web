@@ -23,12 +23,13 @@ Le backend Spring Boot + PostgreSQL est l'unique source de vérité métier (aut
 - Ne jamais accepter comme vérité un total/prix/stock calculé côté client — le serveur revalide toujours.
 - Ne jamais implémenter une transition d'état absente de la state machine des commandes.
 - Décider le comportement UI avec `error.code`, jamais avec le texte `message`.
-- Bloquer le double clic/double soumission sur : paiement, distribution Cantine, clôture caisse, remboursement, ajustement stock.
+- Bloquer le double clic/double soumission sur : paiement, distribution Cantine, clôture caisse, remboursement, ajustement stock, création catalogue.
 - Après une action critique réussie, toujours rafraîchir l'état depuis le serveur (jamais de mise à jour optimiste non confirmée sur ces flux).
 - KDS n'affiche jamais une commande non payée.
 - Ne jamais inventer un endpoint sans le marquer explicitement comme mock/proposition.
 - Ne jamais accéder à une éventuelle DB Cactus/PHP directement, ni supposer son schéma.
 - Ne jamais affirmer qu'une étape est "DONE" sans avoir réellement exécuté lint/typecheck/tests/build.
+- Prix stockés en centimes (`priceCents`), jamais en float — conversion DH uniquement à l'affichage.
 
 ---
 
@@ -67,17 +68,17 @@ Ne jamais sauter plusieurs étapes d'un coup. Ne jamais scaffolder/modifier en m
 
 ## 4. Roadmap W0 → W14
 
-- **W0 — Audit repo** ✅ *(terminé : repo quasi vide, `develop`/`main` identiques, Node v24.14.1, npm 11.11.0)*
-- **W1 — Shell / Design / RBAC** ✅ *(terminé : scaffold, design tokens v3, layout staff, login shell, navigation filtrée par rôle, composants loading/error/empty)*
-- **W2 — API / Auth / Erreurs** ✅ *(terminé : client API typé + mocks + mapping error.code, auth mock login/logout/token, routes staff protégées)*
-- **W3 — Catalogue + premier vertical slice** *(prochaine étape)* : Admin crée un produit → API/DB → visible côté Mobile.
-- **W4 — Orders dashboard** : liste/détail des commandes, états, actions selon permissions.
+- **W0 — Audit repo** ✅
+- **W1 — Shell / Design / RBAC** ✅
+- **W2 — API / Auth / Erreurs** ✅
+- **W3 — Catalogue + premier vertical slice** ✅ *(terminé : Admin crée un produit → mock API → liste rafraîchie ; page accessible par URL, pas encore gardée par rôle au niveau page — voir Open decisions)*
+- **W4 — Orders dashboard** *(prochaine étape)* : liste/détail des commandes, états, actions selon permissions.
 - **W5 — POS MVP** : session caisse, scanner universel, panier, QR commande, paiement CASH/TPE, ticket.
 - **W6 — KDS** : file des commandes payées, Commencer/Prête, temps réel.
 - **W7 — POS Rush / Clôture / Matériel** : mode Rush, clôture avec écarts, impression réelle, scanner physique.
 - **W8 — Inventory / Waste** : stock, mouvements, réceptions, comptages, ajustements, alertes, gaspillage.
 - **W9 — Cantine / Food Pass staff** : menus, scan Food Pass, quota, distribution, anti-double scan.
-- **W10 — Administration** : étudiants, photo, abonnements, cartes, users, rôles, configuration, audit.
+- **W10 — Administration** : étudiants, photo, abonnements, cartes, users, rôles, configuration, audit. *(inclut la protection par rôle au niveau page, pas seulement nav)*
 - **W11 — Snack / Promotions avancé** : options produits, codes-barres, disponibilité, promotions.
 - **W12 — Direction / Finance** : KPI ventes, marge estimée, cantine, stock, gaspillage, adoption, exports.
 - **W13 — Cactus / Matériel — audit d'intégration** : dès que code Cactus et matériel réel disponibles.
@@ -94,7 +95,7 @@ Ne jamais sauter à une étape avancée (ex. W12) parce qu'elle est visuellement
 - Permission correcte (RBAC frontend + attente 403 backend).
 - États loading / empty / error (par `code`) / succès gérés — réutiliser les composants `src/components/states/*`.
 - Double-submit protégé si action critique.
-- Données rafraîchies depuis le serveur après mutation.
+- Données rafraîchies depuis le serveur après mutation (refetch réel, pas juste ajout local optimiste).
 - `npm run dev` vérifié visuellement par Hamza (design, couleurs, comportement, y compris thème sombre après F5).
 - Lint + typecheck + build OK.
 - Aucun secret commité.
@@ -120,7 +121,7 @@ Ne jamais sauter à une étape avancée (ex. W12) parce qu'elle est visuellement
 - `src/lib/roles.ts` — types `Role` (10 rôles) + mapping section de nav → rôles autorisés (proposition frontend, à valider avec la permissions matrix backend officielle).
 - `src/lib/role-context.tsx` — `RoleProvider`/`useRole` (via `useSyncExternalStore`), persistance localStorage, rôle simulé en dev, expose `setInitialRoleFromAuth` (n'écrase pas un rôle déjà choisi manuellement).
 - `src/components/role-switcher.tsx` — dropdown "MODE DEV" dans la barre du haut.
-- `src/components/staff-nav.tsx` — nav du layout staff, filtrée par rôle.
+- `src/components/staff-nav.tsx` — nav du layout staff, filtrée par rôle, nav plate (pas de sous-menus imbriqués).
 - `src/components/theme-toggle.tsx` — toggle clair/sombre, persistance localStorage, init SSR-safe.
 - `src/components/states/loading-state.tsx`, `empty-state.tsx`, `error-state.tsx` — composants génériques réutilisables, `error-state` piloté par `code` uniquement, `traceId` optionnel sans stack trace.
 - `src/app/(staff)/layout.tsx` — layout staff (rail nav + barre du haut + ticket rail), garde d'authentification, bouton Déconnexion.
@@ -129,12 +130,16 @@ Ne jamais sauter à une étape avancée (ex. W12) parce qu'elle est visuellement
 **API / Auth (W2)**
 - `src/lib/api/types.ts` — `ApiError` / `ApiResult<T>`.
 - `src/lib/api/client.ts` — `apiFetch<T>`, bascule mock/live via `NEXT_PUBLIC_API_MODE`, ne throw jamais, mappe les erreurs HTTP vers `ApiError`.
-- `src/lib/api/mocks/index.ts` — handlers mock (`/api/v1/health`, `/api/v1/orders`, `/api/v1/auth/login`, endpoint démo `OUT_OF_STOCK`) — **mocks de dev, ne reflètent pas forcément le vrai contrat OpenAPI**.
+- `src/lib/api/mocks/index.ts` — handlers mock (`/api/v1/health`, `/api/v1/orders`, `/api/v1/auth/login`, `/api/v1/products` GET+POST, endpoint démo `OUT_OF_STOCK`) — **mocks de dev, ne reflètent pas forcément le vrai contrat OpenAPI**. État catalogue en mémoire (réinitialisé au reload, normal à ce stade).
 - `src/lib/api/use-api.ts` — hook `useApiQuery<T>`.
-- `src/lib/error-messages.ts` — mapping `error.code` → message FR (14 codes du cahier des charges).
-- `src/lib/auth/auth-context.tsx` — `AuthProvider`/`useAuth` (via `useSyncExternalStore`), token en `localStorage`, `login`/`logout`, synchronise le rôle actif au login **si aucun rôle n'est déjà choisi manuellement** — **auth 100% mock, à remplacer par le vrai JWT/refresh backend**.
+- `src/lib/error-messages.ts` — mapping `error.code` → message FR (15 codes : les 14 du cahier des charges + `VALIDATION_ERROR`).
+- `src/lib/auth/auth-context.tsx` — `AuthProvider`/`useAuth` (via `useSyncExternalStore`), token en `localStorage`, `login`/`logout` — **auth 100% mock, à remplacer par le vrai JWT/refresh backend**.
 - `src/app/login/page.tsx` — formulaire connecté à `useAuth().login()`, anti double-soumission, redirection vers `/dashboard`.
 - `.env.local.example` — `NEXT_PUBLIC_API_MODE`, `NEXT_PUBLIC_API_URL` documentés.
+
+**Catalogue (W3)**
+- `src/lib/api/catalogue-types.ts` — `Product` / `CreateProductInput`, prix en `priceCents`.
+- `src/app/(staff)/administration/catalogue/page.tsx` — formulaire création + liste produits, anti double-submit, refetch réel après création, `VALIDATION_ERROR` géré via `error-state`. **Accessible par URL même hors ADMINISTRATION/SYSTEM_ADMIN — nav masquée mais page non gardée par rôle (voir Open decisions).**
 
 ---
 
@@ -144,13 +149,13 @@ Ne jamais sauter à une étape avancée (ex. W12) parce qu'elle est visuellement
 Project: SUP2I FOOD
 Repo: sup2i-food-web (GitHub: maskmohammed/sup2i-food-web, privé)
 Base branch: develop
-Working branch: (à définir pour W3)
-Current milestone: W2 — API / Auth / Erreurs ✅ TERMINÉ. Prochaine étape : W3 — Catalogue + premier vertical slice
+Working branch: (à définir pour W4)
+Current milestone: W3 — Catalogue + premier vertical slice ✅ TERMINÉ. Prochaine étape : W4 — Orders dashboard
 Completed:
 - W0: audit repo terminé
 - W1: scaffold + design tokens v3 + layout staff + login shell + navigation par rôle + états loading/error/empty — mergé sur develop
-- W2.1: client API typé + mocks + mapping error.code — mergé sur develop
-- W2.2: auth mock (login/logout/token) + routes staff protégées — mergé sur develop
+- W2: client API typé + mocks + mapping error.code + auth mock (login/logout/token) + routes staff protégées — mergé sur develop
+- W3: catalogue — création + liste produit, validation, refetch réel — mergé sur develop
 Validated:
 - lint: OK
 - typecheck: OK (via build)
@@ -162,8 +167,9 @@ Backend dependencies:
 Open decisions:
 - Cactus/PHP: audit non démarré
 - Auth actuelle 100% mock — à remplacer par vrai JWT/refresh backend quand disponible (localStorage à revoir vers cookie httpOnly à ce moment-là)
+- Page /administration/catalogue accessible par URL directe même sans rôle ADMINISTRATION/SYSTEM_ADMIN (protection nav seulement, pas de garde au niveau page) — à corriger, décidé de reporter à W10 (Administration)
 Next exact action:
-- Démarrer W3: Admin crée un produit (catalogue) → passe par le client API existant → premier vertical slice de bout en bout
+- Démarrer W4: liste/détail des commandes (Orders dashboard), états de la state machine, actions selon permissions
 ```
 
 *(Ce bloc doit être mis à jour à chaque étape validée — ne jamais écrire "terminé" sans exécution réelle des validations.)*
