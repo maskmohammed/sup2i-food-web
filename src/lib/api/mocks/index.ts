@@ -8,6 +8,7 @@ import type { Role } from "@/lib/roles";
 import type { ApiResult } from "../types";
 import type { CreateProductInput, Product } from "../catalogue-types";
 import { ORDER_TRANSITIONS, type Order, type OrderStatus } from "../orders-types";
+import type { CartItem, CartPriceResult } from "../pos-types";
 
 // État en mémoire du module — se réinitialise au reload, pas de vraie
 // persistance tant que le backend n'expose pas /api/v1/orders.
@@ -170,6 +171,58 @@ function handleCreateProduct(options?: RequestInit): ApiResult<Product> {
   return { ok: true, data: product };
 }
 
+type CartPriceRequestItem = { productId?: unknown; quantity?: unknown };
+type CartPriceRequestBody = { items?: unknown };
+
+/**
+ * Mock illustrant le principe "jamais de prix autoritaire côté client" :
+ * le payload attendu ({ productId, quantity }) ne contient volontairement
+ * aucun prix — le total est toujours recalculé ici à partir de `products`.
+ * À remplacer par le vrai calcul backend (avec, en plus, les règles de
+ * stock/quotas réelles) dès qu'il sera disponible.
+ */
+function handlePriceCart(options?: RequestInit): ApiResult<CartPriceResult> {
+  const body = parseJsonBody<CartPriceRequestBody>(options);
+  const rawItems: unknown[] = Array.isArray(body?.items) ? body.items : [];
+
+  const items: CartItem[] = [];
+  let totalCents = 0;
+
+  for (const rawItem of rawItems) {
+    const candidate = rawItem as CartPriceRequestItem;
+    const productId = typeof candidate.productId === "string" ? candidate.productId : null;
+    const quantity =
+      typeof candidate.quantity === "number" && candidate.quantity > 0 ? candidate.quantity : null;
+
+    if (!productId || !quantity) {
+      return {
+        ok: false,
+        error: { code: "VALIDATION_ERROR", message: getErrorMessage("VALIDATION_ERROR"), status: 422 },
+      };
+    }
+
+    const product = products.find((candidateProduct) => candidateProduct.id === productId);
+    if (!product || !product.available) {
+      return {
+        ok: false,
+        error: { code: "OUT_OF_STOCK", message: getErrorMessage("OUT_OF_STOCK"), status: 409 },
+      };
+    }
+
+    const subtotalCents = product.priceCents * quantity;
+    items.push({
+      productId: product.id,
+      productName: product.name,
+      quantity,
+      unitPriceCents: product.priceCents,
+      subtotalCents,
+    });
+    totalCents += subtotalCents;
+  }
+
+  return { ok: true, data: { items, totalCents } };
+}
+
 function handleGetOrder(id: string): ApiResult<Order> {
   const order = orders.find((candidate) => candidate.id === id);
   if (!order) {
@@ -232,6 +285,8 @@ const mockHandlers: Record<string, MockHandler> = {
 
   "GET /api/v1/products": () => ({ ok: true, data: products }),
   "POST /api/v1/products": handleCreateProduct,
+
+  "POST /api/v1/pos/cart/price": handlePriceCart,
 };
 
 export function resolveMock<T>(path: string, options?: RequestInit): ApiResult<T> {

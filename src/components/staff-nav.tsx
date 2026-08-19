@@ -60,6 +60,7 @@ const navItems: {
     label: "POS",
     href: "/pos",
     section: "pos",
+    implemented: true,
     icon: (
       <NavIcon>
         <rect x="4" y="3" width="16" height="12" rx="2" />
