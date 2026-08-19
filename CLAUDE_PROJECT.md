@@ -63,7 +63,7 @@ Pour chaque étape de la roadmap :
 6. Mise à jour du bloc `CURRENT_STATUS` ci-dessous.
 7. Passage à l'étape suivante seulement après validation explicite de Hamza.
 
-Ne jamais sauter plusieurs étapes d'un coup. Ne jamais scaffolder/modifier en masse sans inspection préalable. Les étapes larges (W2, W5) sont découpées en sous-étapes (W2.1/W2.2, W5.1/W5.2) — continuer ce découpage pour les prochaines étapes volumineuses (W6, W8, W10 notamment).
+Ne jamais sauter plusieurs étapes d'un coup. Ne jamais scaffolder/modifier en masse sans inspection préalable. Les étapes larges (W2, W5) sont découpées en sous-étapes — continuer ce découpage pour les prochaines étapes volumineuses (W8, W10 notamment).
 
 ---
 
@@ -74,9 +74,9 @@ Ne jamais sauter plusieurs étapes d'un coup. Ne jamais scaffolder/modifier en m
 - **W2 — API / Auth / Erreurs** ✅
 - **W3 — Catalogue + premier vertical slice** ✅ *(page catalogue accessible par URL même hors rôle autorisé — reporté à W10)*
 - **W4 — Orders dashboard** ✅ *(liste + détail + transitions filtrées par state machine ET rôle, mappings en proposition à valider avec le Dev Backend)*
-- **W5 — POS MVP** ✅ *(terminé : W5.1 grille produit + panier + total serveur ; W5.2 session caisse + paiement CASH/TPE + ticket. Simplification commentée : commande créée directement en PAID, pas d'étape AWAITING_PAYMENT intermédiaire pour l'instant — à revoir avec le vrai flux backend)*
-- **W6 — KDS** *(prochaine étape)* : file des commandes payées, Commencer/Prête, temps réel.
-- **W7 — POS Rush / Clôture / Matériel** : mode Rush, clôture avec écarts, impression réelle, scanner physique.
+- **W5 — POS MVP** ✅ *(session caisse + panier + paiement CASH/TPE + ticket ; commande créée directement en PAID, simplification MVP)*
+- **W6 — KDS** ✅ *(terminé : colonnes "À préparer"/"En préparation", transitions Commencer/Prête filtrées par rôle, polling 6s, hook use-order-transition partagé avec /orders/[id])*
+- **W7 — POS Rush / Clôture / Matériel** *(prochaine étape)* : mode Rush, clôture avec écarts, impression réelle, scanner physique.
 - **W8 — Inventory / Waste** : stock, mouvements, réceptions, comptages, ajustements, alertes, gaspillage.
 - **W9 — Cantine / Food Pass staff** : menus, scan Food Pass, quota, distribution, anti-double scan.
 - **W10 — Administration** : étudiants, photo, abonnements, cartes, users, rôles, configuration, audit. *(inclut la protection par rôle au niveau page pour catalogue, pas seulement nav)*
@@ -110,11 +110,11 @@ Ne jamais sauter à une étape avancée (ex. W12) parce qu'elle est visuellement
 
 **Clair** : fond `#F5F7FA`, surface `#FFFFFF`, bordure `#D8E0EC`, texte `#16283F`, texte secondaire `#5C6B85`, accent marque `#B01552`.
 
-**Statuts** (identiques dans les deux thèmes, réutilisés pour les commandes) : à préparer/QUEUED `#F5A623`, en préparation/PREPARING `#2DB4C7`, prête/READY `#22C55E`, problème/annulé `#EF4444`.
+**Statuts** (identiques dans les deux thèmes) : à préparer/QUEUED `#F5A623`, en préparation/PREPARING `#2DB4C7`, prête/READY `#22C55E`, problème/annulé `#EF4444`.
 
-**Typo** : IBM Plex Sans (UI), IBM Plex Mono (données/codes/montants). Signature visuelle : motif "ticket rail" (séparation en pointillés) entre nav et contenu.
+**Typo** : IBM Plex Sans (UI), IBM Plex Mono (données/codes/montants). Signature visuelle : motif "ticket rail" (pointillés) entre nav et contenu.
 
-**Note responsive** : la grille produit POS a eu un bug de chevauchement (grid-cols fixe non adaptatif) — corrigé en W5.1 avec `auto-fill`/`minmax`. Vérifier ce pattern pour toute nouvelle grille (KDS, Stock, etc.).
+**Note responsive** : toute grille de cartes (produits, KDS) utilise `auto-fill`/`minmax`, jamais un nombre de colonnes fixe — bug corrigé une fois en W5.1, à ne pas répéter.
 
 ---
 
@@ -122,36 +122,32 @@ Ne jamais sauter à une étape avancée (ex. W12) parce qu'elle est visuellement
 
 **Design / layout (W1)**
 - `src/lib/roles.ts` — types `Role` (10 rôles) + mapping section de nav → rôles autorisés (proposition frontend).
-- `src/lib/role-context.tsx` — `RoleProvider`/`useRole`, persistance localStorage, rôle simulé en dev.
-- `src/components/role-switcher.tsx` — dropdown "MODE DEV".
-- `src/components/staff-nav.tsx` — nav filtrée par rôle, plate.
-- `src/components/theme-toggle.tsx` — toggle clair/sombre, persistance localStorage.
-- `src/components/states/loading-state.tsx`, `empty-state.tsx`, `error-state.tsx` — composants réutilisables, `error-state` piloté par `code` uniquement.
+- `src/lib/role-context.tsx` — `RoleProvider`/`useRole`, persistance localStorage.
+- `src/components/role-switcher.tsx`, `theme-toggle.tsx`, `staff-nav.tsx` — sélecteur rôle dev, toggle thème, nav filtrée.
+- `src/components/states/loading-state.tsx`, `empty-state.tsx`, `error-state.tsx` — composants réutilisables, `error-state` piloté par `code`.
 - `src/app/(staff)/layout.tsx` — layout staff, garde d'authentification, bouton Déconnexion.
-- `src/app/(staff)/dashboard/page.tsx` — dashboard avec cartes de statut simulées.
 
 **API / Auth (W2)**
-- `src/lib/api/types.ts` — `ApiError` / `ApiResult<T>`.
-- `src/lib/api/client.ts` — `apiFetch<T>`, bascule mock/live via `NEXT_PUBLIC_API_MODE`, ne throw jamais.
-- `src/lib/api/mocks/index.ts` — registre de handlers mock (health, auth/login, products, orders, pos/cart/price, pos/session, pos/orders) — **mocks de dev, ne reflètent pas forcément le vrai contrat OpenAPI**. État en mémoire (réinitialisé au reload).
+- `src/lib/api/types.ts`, `client.ts` — `ApiError`/`ApiResult<T>`, `apiFetch<T>`, bascule mock/live via `NEXT_PUBLIC_API_MODE`.
+- `src/lib/api/mocks/index.ts` — registre mock (health, auth/login, products, orders, pos/*) — **ne reflète pas forcément le vrai contrat OpenAPI**. État en mémoire, réinitialisé au reload.
 - `src/lib/api/use-api.ts` — hook `useApiQuery<T>`.
-- `src/lib/error-messages.ts` — mapping `error.code` → message FR (17 codes : 14 du cahier des charges + `VALIDATION_ERROR` + `SESSION_ALREADY_OPEN`).
-- `src/lib/auth/auth-context.tsx` — `AuthProvider`/`useAuth`, token en `localStorage` — **auth 100% mock**.
-- `.env.local.example` — `NEXT_PUBLIC_API_MODE`, `NEXT_PUBLIC_API_URL`.
+- `src/lib/error-messages.ts` — mapping `error.code` → FR (17 codes).
+- `src/lib/auth/auth-context.tsx` — `AuthProvider`/`useAuth`, token localStorage — **auth 100% mock**.
 
 **Catalogue (W3)**
-- `src/lib/api/catalogue-types.ts` — `Product` / `CreateProductInput`, prix en `priceCents`.
-- `src/app/(staff)/administration/catalogue/page.tsx` — création + liste produits. **Page non gardée par rôle (URL directe accessible) — reporté à W10.**
+- `src/lib/api/catalogue-types.ts`, `src/app/(staff)/administration/catalogue/page.tsx` — création + liste produits. **Page non gardée par rôle — reporté à W10.**
 
 **Orders dashboard (W4)**
 - `src/lib/api/orders-types.ts` — `OrderStatus` (13 statuts), `Order`, `ORDER_TRANSITIONS`, `ORDER_TRANSITION_ROLES` (propositions à valider avec le Dev Backend).
-- `src/app/(staff)/orders/page.tsx` — liste des commandes.
-- `src/app/(staff)/orders/[id]/page.tsx` — détail + transitions filtrées par state machine et rôle.
+- `src/app/(staff)/orders/page.tsx`, `orders/[id]/page.tsx` — liste + détail, transitions via hook partagé (voir W6).
 
 **POS (W5)**
 - `src/lib/api/pos-types.ts` — `CartItem`, `CartPriceResult`, `CashSession`, `PaymentMethod`, `CreatedOrder`.
-- `src/app/(staff)/pos/page.tsx` — écran complet : garde de session (bloque l'accès sans session ouverte), ouverture de session (fond de caisse), grille produit (grid responsive `auto-fill`/`minmax`), panier avec total recalculé serveur (debounce 300ms), sélection paiement CASH/TPE, écran ticket, "Nouvelle vente". Accessible à CASHIER, SNACK_MANAGER, ADMINISTRATION, SYSTEM_ADMIN.
-- Commande créée directement en statut `PAID` (simplification MVP commentée dans le mock, pas d'`AWAITING_PAYMENT` intermédiaire pour l'instant), visible ensuite dans `/orders`.
+- `src/app/(staff)/pos/page.tsx` — garde de session, grille produit responsive, panier avec total serveur (debounce 300ms), paiement CASH/TPE, ticket, "Nouvelle vente". Commande créée directement en `PAID` (simplification MVP).
+
+**KDS (W6)**
+- `src/lib/api/use-order-transition.ts` — hook partagé (transition + anti double-submit + refetch), utilisé par `/orders/[id]` ET `/kds`.
+- `src/app/(staff)/kds/page.tsx` — colonnes "À préparer" (PAID+QUEUED) / "En préparation" (PREPARING), cartes grand format, polling 6s (commenté comme solution temporaire avant WebSocket/SSE réel), n'affiche jamais une commande hors PAID/QUEUED/PREPARING. Accessible à KITCHEN_STAFF, SNACK_MANAGER, ADMINISTRATION, SYSTEM_ADMIN.
 
 ---
 
@@ -161,16 +157,11 @@ Ne jamais sauter à une étape avancée (ex. W12) parce qu'elle est visuellement
 Project: SUP2I FOOD
 Repo: sup2i-food-web (GitHub: maskmohammed/sup2i-food-web, privé)
 Base branch: develop
-Working branch: (à définir pour W6)
-Current milestone: W5 — POS MVP ✅ TERMINÉ. Prochaine étape : W6 — KDS
+Working branch: (à définir pour W7)
+Current milestone: W6 — KDS ✅ TERMINÉ. Prochaine étape : W7 — POS Rush / Clôture / Matériel
 Completed:
-- W0: audit repo terminé
-- W1: scaffold + design tokens v3 + layout staff + login shell + navigation par rôle + états loading/error/empty — mergé sur develop
-- W2: client API typé + mocks + mapping error.code + auth mock + routes staff protégées — mergé sur develop
-- W3: catalogue — création + liste produit, validation, refetch réel — mergé sur develop
-- W4: orders dashboard — liste + détail + transitions state machine filtrées par rôle — mergé sur develop
-- W5.1: POS — grille produit responsive + panier + total serveur — mergé sur develop
-- W5.2: POS — session caisse + paiement CASH/TPE + ticket — mergé sur develop
+- W0-W5: voir historique (audit, design tokens, API/auth mock, catalogue, orders dashboard, POS MVP)
+- W6: KDS — colonnes, transitions Commencer/Prête, polling, hook partagé — mergé sur develop
 Validated:
 - lint: OK
 - typecheck: OK (via build)
@@ -181,12 +172,13 @@ Backend dependencies:
 - pending: JWT/RBAC réel, endpoints métier (43 paths cibles, pas tous implémentés)
 Open decisions:
 - Cactus/PHP: audit non démarré
-- Auth actuelle 100% mock — à remplacer par vrai JWT/refresh backend quand disponible
+- Auth actuelle 100% mock — à remplacer par vrai JWT/refresh backend
 - Page /administration/catalogue accessible par URL directe sans garde de rôle — reporté à W10
 - ORDER_TRANSITIONS et ORDER_TRANSITION_ROLES sont des propositions frontend — à confirmer avec le Dev Backend
-- Commande POS créée directement en PAID (pas d'AWAITING_PAYMENT) — simplification MVP à revoir avec le vrai flux backend/TPE
+- Commande POS créée directement en PAID (pas d'AWAITING_PAYMENT) — à revoir avec le vrai flux backend/TPE
+- KDS en polling (6s) plutôt que WebSocket/SSE — à revoir si les volumes réels le justifient
 Next exact action:
-- Démarrer W6: KDS — file des commandes payées (status PAID/QUEUED/PREPARING), actions Commencer/Prête, réutiliser les commandes déjà créées via POS pour peupler la file
+- Démarrer W7: mode Rush (SCAN→PAYER→SUIVANT simplifié), clôture de session caisse avec calcul d'écarts, préparer les points d'intégration impression/scanner réels (sans matériel physique disponible pour l'instant — mock ou simulation à prévoir)
 ```
 
 *(Ce bloc doit être mis à jour à chaque étape validée — ne jamais écrire "terminé" sans exécution réelle des validations.)*
