@@ -23,13 +23,14 @@ Le backend Spring Boot + PostgreSQL est l'unique source de vérité métier (aut
 - Ne jamais accepter comme vérité un total/prix/stock calculé côté client — le serveur revalide toujours.
 - Ne jamais implémenter une transition d'état absente de la state machine des commandes.
 - Décider le comportement UI avec `error.code`, jamais avec le texte `message`.
-- Bloquer le double clic/double soumission sur : paiement, distribution Cantine, clôture caisse, remboursement, ajustement stock, création catalogue, transition de commande.
+- Bloquer le double clic/double soumission sur : paiement, distribution Cantine, clôture caisse, remboursement, ajustement stock, création catalogue, transition de commande, ouverture session caisse.
 - Après une action critique réussie, toujours rafraîchir l'état depuis le serveur (jamais de mise à jour optimiste non confirmée sur ces flux).
 - KDS n'affiche jamais une commande non payée.
 - Ne jamais inventer un endpoint sans le marquer explicitement comme mock/proposition.
 - Ne jamais accéder à une éventuelle DB Cactus/PHP directement, ni supposer son schéma.
 - Ne jamais affirmer qu'une étape est "DONE" sans avoir réellement exécuté lint/typecheck/tests/build.
 - Prix stockés en centimes (`priceCents`), jamais en float — conversion DH uniquement à l'affichage.
+- Le total d'un panier/commande vient toujours d'un round-trip serveur, jamais d'un sum() local, même en mock.
 
 ---
 
@@ -62,7 +63,7 @@ Pour chaque étape de la roadmap :
 6. Mise à jour du bloc `CURRENT_STATUS` ci-dessous.
 7. Passage à l'étape suivante seulement après validation explicite de Hamza.
 
-Ne jamais sauter plusieurs étapes d'un coup. Ne jamais scaffolder/modifier en masse sans inspection préalable.
+Ne jamais sauter plusieurs étapes d'un coup. Ne jamais scaffolder/modifier en masse sans inspection préalable. Les étapes larges (W2, W5) sont découpées en sous-étapes (W2.1/W2.2, W5.1/W5.2) — continuer ce découpage pour les prochaines étapes volumineuses (W6, W8, W10 notamment).
 
 ---
 
@@ -71,10 +72,10 @@ Ne jamais sauter plusieurs étapes d'un coup. Ne jamais scaffolder/modifier en m
 - **W0 — Audit repo** ✅
 - **W1 — Shell / Design / RBAC** ✅
 - **W2 — API / Auth / Erreurs** ✅
-- **W3 — Catalogue + premier vertical slice** ✅ *(page catalogue accessible par URL même hors rôle autorisé — nav masquée seulement, pas de garde page — reporté à W10)*
-- **W4 — Orders dashboard** ✅ *(terminé : liste + détail + transitions filtrées par state machine ET par rôle, mapping action→rôles en proposition à valider avec la permissions matrix officielle)*
-- **W5 — POS MVP** *(prochaine étape)* : session caisse, scanner universel, panier, QR commande, paiement CASH/TPE, ticket.
-- **W6 — KDS** : file des commandes payées, Commencer/Prête, temps réel.
+- **W3 — Catalogue + premier vertical slice** ✅ *(page catalogue accessible par URL même hors rôle autorisé — reporté à W10)*
+- **W4 — Orders dashboard** ✅ *(liste + détail + transitions filtrées par state machine ET rôle, mappings en proposition à valider avec le Dev Backend)*
+- **W5 — POS MVP** ✅ *(terminé : W5.1 grille produit + panier + total serveur ; W5.2 session caisse + paiement CASH/TPE + ticket. Simplification commentée : commande créée directement en PAID, pas d'étape AWAITING_PAYMENT intermédiaire pour l'instant — à revoir avec le vrai flux backend)*
+- **W6 — KDS** *(prochaine étape)* : file des commandes payées, Commencer/Prête, temps réel.
 - **W7 — POS Rush / Clôture / Matériel** : mode Rush, clôture avec écarts, impression réelle, scanner physique.
 - **W8 — Inventory / Waste** : stock, mouvements, réceptions, comptages, ajustements, alertes, gaspillage.
 - **W9 — Cantine / Food Pass staff** : menus, scan Food Pass, quota, distribution, anti-double scan.
@@ -113,26 +114,28 @@ Ne jamais sauter à une étape avancée (ex. W12) parce qu'elle est visuellement
 
 **Typo** : IBM Plex Sans (UI), IBM Plex Mono (données/codes/montants). Signature visuelle : motif "ticket rail" (séparation en pointillés) entre nav et contenu.
 
+**Note responsive** : la grille produit POS a eu un bug de chevauchement (grid-cols fixe non adaptatif) — corrigé en W5.1 avec `auto-fill`/`minmax`. Vérifier ce pattern pour toute nouvelle grille (KDS, Stock, etc.).
+
 ---
 
 ## 7. Ce qui existe déjà (repères pour Claude Code)
 
 **Design / layout (W1)**
-- `src/lib/roles.ts` — types `Role` (10 rôles) + mapping section de nav → rôles autorisés (proposition frontend, à valider avec la permissions matrix backend officielle).
-- `src/lib/role-context.tsx` — `RoleProvider`/`useRole` (via `useSyncExternalStore`), persistance localStorage, rôle simulé en dev.
-- `src/components/role-switcher.tsx` — dropdown "MODE DEV" dans la barre du haut.
-- `src/components/staff-nav.tsx` — nav du layout staff, filtrée par rôle, nav plate.
-- `src/components/theme-toggle.tsx` — toggle clair/sombre, persistance localStorage, init SSR-safe.
-- `src/components/states/loading-state.tsx`, `empty-state.tsx`, `error-state.tsx` — composants génériques réutilisables, `error-state` piloté par `code` uniquement.
+- `src/lib/roles.ts` — types `Role` (10 rôles) + mapping section de nav → rôles autorisés (proposition frontend).
+- `src/lib/role-context.tsx` — `RoleProvider`/`useRole`, persistance localStorage, rôle simulé en dev.
+- `src/components/role-switcher.tsx` — dropdown "MODE DEV".
+- `src/components/staff-nav.tsx` — nav filtrée par rôle, plate.
+- `src/components/theme-toggle.tsx` — toggle clair/sombre, persistance localStorage.
+- `src/components/states/loading-state.tsx`, `empty-state.tsx`, `error-state.tsx` — composants réutilisables, `error-state` piloté par `code` uniquement.
 - `src/app/(staff)/layout.tsx` — layout staff, garde d'authentification, bouton Déconnexion.
-- `src/app/(staff)/dashboard/page.tsx` — dashboard avec cartes de statut simulées (démo API retirée en W4).
+- `src/app/(staff)/dashboard/page.tsx` — dashboard avec cartes de statut simulées.
 
 **API / Auth (W2)**
 - `src/lib/api/types.ts` — `ApiError` / `ApiResult<T>`.
 - `src/lib/api/client.ts` — `apiFetch<T>`, bascule mock/live via `NEXT_PUBLIC_API_MODE`, ne throw jamais.
-- `src/lib/api/mocks/index.ts` — registre de handlers mock (health, auth/login, products GET+POST, orders GET+détail+transition) — **mocks de dev, ne reflètent pas forcément le vrai contrat OpenAPI**. État en mémoire (réinitialisé au reload).
+- `src/lib/api/mocks/index.ts` — registre de handlers mock (health, auth/login, products, orders, pos/cart/price, pos/session, pos/orders) — **mocks de dev, ne reflètent pas forcément le vrai contrat OpenAPI**. État en mémoire (réinitialisé au reload).
 - `src/lib/api/use-api.ts` — hook `useApiQuery<T>`.
-- `src/lib/error-messages.ts` — mapping `error.code` → message FR (15 codes : 14 du cahier des charges + `VALIDATION_ERROR`).
+- `src/lib/error-messages.ts` — mapping `error.code` → message FR (17 codes : 14 du cahier des charges + `VALIDATION_ERROR` + `SESSION_ALREADY_OPEN`).
 - `src/lib/auth/auth-context.tsx` — `AuthProvider`/`useAuth`, token en `localStorage` — **auth 100% mock**.
 - `.env.local.example` — `NEXT_PUBLIC_API_MODE`, `NEXT_PUBLIC_API_URL`.
 
@@ -141,10 +144,14 @@ Ne jamais sauter à une étape avancée (ex. W12) parce qu'elle est visuellement
 - `src/app/(staff)/administration/catalogue/page.tsx` — création + liste produits. **Page non gardée par rôle (URL directe accessible) — reporté à W10.**
 
 **Orders dashboard (W4)**
-- `src/lib/api/orders-types.ts` — `OrderStatus` (13 statuts incl. CANCELLED/EXPIRED/REFUNDED/NO_SHOW), `Order`, `ORDER_TRANSITIONS` (state machine, proposition à valider avec STATE_MACHINES.md officiel si fourni), `ORDER_TRANSITION_ROLES` (action→rôles, proposition à valider avec la permissions matrix officielle), labels/couleurs de statut.
-- `src/app/(staff)/orders/page.tsx` — liste des commandes (pastilles de statut, DH, canal).
-- `src/app/(staff)/orders/[id]/page.tsx` — détail + actions de transition filtrées par state machine ET rôle actif, anti double-submit, refetch réel après transition, message neutre si aucune action disponible pour le rôle.
-- Accessible aux rôles : CASHIER, SNACK_MANAGER, KITCHEN_STAFF, ADMINISTRATION, SYSTEM_ADMIN.
+- `src/lib/api/orders-types.ts` — `OrderStatus` (13 statuts), `Order`, `ORDER_TRANSITIONS`, `ORDER_TRANSITION_ROLES` (propositions à valider avec le Dev Backend).
+- `src/app/(staff)/orders/page.tsx` — liste des commandes.
+- `src/app/(staff)/orders/[id]/page.tsx` — détail + transitions filtrées par state machine et rôle.
+
+**POS (W5)**
+- `src/lib/api/pos-types.ts` — `CartItem`, `CartPriceResult`, `CashSession`, `PaymentMethod`, `CreatedOrder`.
+- `src/app/(staff)/pos/page.tsx` — écran complet : garde de session (bloque l'accès sans session ouverte), ouverture de session (fond de caisse), grille produit (grid responsive `auto-fill`/`minmax`), panier avec total recalculé serveur (debounce 300ms), sélection paiement CASH/TPE, écran ticket, "Nouvelle vente". Accessible à CASHIER, SNACK_MANAGER, ADMINISTRATION, SYSTEM_ADMIN.
+- Commande créée directement en statut `PAID` (simplification MVP commentée dans le mock, pas d'`AWAITING_PAYMENT` intermédiaire pour l'instant), visible ensuite dans `/orders`.
 
 ---
 
@@ -154,14 +161,16 @@ Ne jamais sauter à une étape avancée (ex. W12) parce qu'elle est visuellement
 Project: SUP2I FOOD
 Repo: sup2i-food-web (GitHub: maskmohammed/sup2i-food-web, privé)
 Base branch: develop
-Working branch: (à définir pour W5)
-Current milestone: W4 — Orders dashboard ✅ TERMINÉ. Prochaine étape : W5 — POS MVP
+Working branch: (à définir pour W6)
+Current milestone: W5 — POS MVP ✅ TERMINÉ. Prochaine étape : W6 — KDS
 Completed:
 - W0: audit repo terminé
 - W1: scaffold + design tokens v3 + layout staff + login shell + navigation par rôle + états loading/error/empty — mergé sur develop
 - W2: client API typé + mocks + mapping error.code + auth mock + routes staff protégées — mergé sur develop
 - W3: catalogue — création + liste produit, validation, refetch réel — mergé sur develop
 - W4: orders dashboard — liste + détail + transitions state machine filtrées par rôle — mergé sur develop
+- W5.1: POS — grille produit responsive + panier + total serveur — mergé sur develop
+- W5.2: POS — session caisse + paiement CASH/TPE + ticket — mergé sur develop
 Validated:
 - lint: OK
 - typecheck: OK (via build)
@@ -174,9 +183,10 @@ Open decisions:
 - Cactus/PHP: audit non démarré
 - Auth actuelle 100% mock — à remplacer par vrai JWT/refresh backend quand disponible
 - Page /administration/catalogue accessible par URL directe sans garde de rôle — reporté à W10
-- ORDER_TRANSITIONS et ORDER_TRANSITION_ROLES sont des propositions frontend — à confirmer avec le Dev Backend dès que STATE_MACHINES.md / permissions matrix officiels existent
+- ORDER_TRANSITIONS et ORDER_TRANSITION_ROLES sont des propositions frontend — à confirmer avec le Dev Backend
+- Commande POS créée directement en PAID (pas d'AWAITING_PAYMENT) — simplification MVP à revoir avec le vrai flux backend/TPE
 Next exact action:
-- Démarrer W5: session caisse (POS MVP) — scanner universel, panier, QR commande, paiement CASH/TPE, ticket
+- Démarrer W6: KDS — file des commandes payées (status PAID/QUEUED/PREPARING), actions Commencer/Prête, réutiliser les commandes déjà créées via POS pour peupler la file
 ```
 
 *(Ce bloc doit être mis à jour à chaque étape validée — ne jamais écrire "terminé" sans exécution réelle des validations.)*
