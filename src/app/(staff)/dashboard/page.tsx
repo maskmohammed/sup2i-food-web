@@ -1,6 +1,4 @@
-import { EmptyState } from "@/components/states/empty-state";
-import { ErrorState } from "@/components/states/error-state";
-import { LoadingState } from "@/components/states/loading-state";
+import { OrdersApiDemo } from "./orders-api-demo";
 
 const statusCards: { label: string; value: number; colorClass: string }[] = [
   { label: "En attente", value: 3, colorClass: "bg-status-queued" },
@@ -8,17 +6,6 @@ const statusCards: { label: string; value: number; colorClass: string }[] = [
   { label: "Prêtes", value: 5, colorClass: "bg-status-ready" },
   { label: "Problème", value: 1, colorClass: "bg-status-alert" },
 ];
-
-function DemoRetryButton() {
-  return (
-    <button
-      type="button"
-      className="rounded-md border border-border bg-surface px-3 py-1.5 text-sm text-text transition-colors hover:bg-surface-raised"
-    >
-      Réessayer
-    </button>
-  );
-}
 
 export default function DashboardPage() {
   return (
@@ -50,20 +37,9 @@ export default function DashboardPage() {
 
       <div className="mt-10 rounded-lg border border-dashed border-accent-warm p-4">
         <p className="mb-4 text-xs font-semibold uppercase tracking-wide text-accent-warm">
-          Aperçu des états UI — à retirer plus tard
+          Démo client API (mock) — à retirer plus tard
         </p>
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">
-          <LoadingState />
-          <EmptyState title="Aucune commande" description="Rien à afficher pour le moment.">
-            <DemoRetryButton />
-          </EmptyState>
-          <ErrorState code="OUT_OF_STOCK">
-            <DemoRetryButton />
-          </ErrorState>
-          <ErrorState code="INTERNAL_ERROR" traceId="trc_7f3a9c21">
-            <DemoRetryButton />
-          </ErrorState>
-        </div>
+        <OrdersApiDemo />
       </div>
     </div>
   );
