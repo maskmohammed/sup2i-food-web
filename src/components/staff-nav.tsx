@@ -22,11 +22,19 @@ function NavIcon({ children }: { children: ReactNode }) {
   );
 }
 
-const navItems: { label: string; href: string; section: NavSectionId; icon: ReactNode }[] = [
+const navItems: {
+  label: string;
+  href: string;
+  section: NavSectionId;
+  icon: ReactNode;
+  /** Page réelle (Link, navigation client) vs placeholder pas encore construit (<a>, 404 attendu). */
+  implemented?: boolean;
+}[] = [
   {
     label: "Dashboard",
     href: "/dashboard",
     section: "dashboard",
+    implemented: true,
     icon: (
       <NavIcon>
         <rect x="3" y="3" width="7" height="7" rx="1" />
@@ -96,6 +104,18 @@ const navItems: { label: string; href: string; section: NavSectionId; icon: Reac
     ),
   },
   {
+    label: "Catalogue",
+    href: "/administration/catalogue",
+    section: "catalogue",
+    implemented: true,
+    icon: (
+      <NavIcon>
+        <path d="M20.59 13.41 12 22l-9-9V4a1 1 0 0 1 1-1h9l9 9a1 1 0 0 1 0 1.41Z" />
+        <circle cx="7.5" cy="7.5" r="1.5" />
+      </NavIcon>
+    ),
+  },
+  {
     label: "Direction",
     href: "/direction",
     section: "direction",
@@ -119,10 +139,10 @@ export function StaffNav() {
   return (
     <nav className="flex flex-col gap-1">
       {items.map((item) =>
-        item.href === "/dashboard" ? (
+        item.implemented ? (
           <Link
             key={item.href}
-            href="/dashboard"
+            href={item.href}
             className="flex items-center gap-3 rounded-md px-3 py-2 text-sm text-text-muted transition-colors hover:bg-surface-raised hover:text-text"
           >
             {item.icon}

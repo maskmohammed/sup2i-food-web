@@ -6,6 +6,7 @@
 import { getErrorMessage } from "@/lib/error-messages";
 import type { Role } from "@/lib/roles";
 import type { ApiResult } from "../types";
+import type { CreateProductInput, Product } from "../catalogue-types";
 
 export type OrderStatus =
   | "DRAFT"
@@ -36,16 +37,16 @@ export type MockLoginResponse = {
   user: { name: string; role: Role };
 };
 
-type LoginRequestBody = { identifiant?: unknown; motDePasse?: unknown };
-
-function parseJsonBody(options?: RequestInit): LoginRequestBody | null {
+function parseJsonBody<T>(options?: RequestInit): T | null {
   if (typeof options?.body !== "string") return null;
   try {
-    return JSON.parse(options.body) as LoginRequestBody;
+    return JSON.parse(options.body) as T;
   } catch {
     return null;
   }
 }
+
+type LoginRequestBody = { identifiant?: unknown; motDePasse?: unknown };
 
 /**
  * Mock du flux de login — ce n'est PAS le vrai flux JWT/refresh du backend
@@ -54,7 +55,7 @@ function parseJsonBody(options?: RequestInit): LoginRequestBody | null {
  * défaut, faute de vraie permissions matrix au login pour l'instant.
  */
 function handleLogin(options?: RequestInit): ApiResult<MockLoginResponse> {
-  const body = parseJsonBody(options);
+  const body = parseJsonBody<LoginRequestBody>(options);
   const identifiant = typeof body?.identifiant === "string" ? body.identifiant : "";
   const motDePasse = typeof body?.motDePasse === "string" ? body.motDePasse : "";
 
@@ -72,6 +73,41 @@ function handleLogin(options?: RequestInit): ApiResult<MockLoginResponse> {
       user: { name: identifiant || "Utilisateur", role: "ADMINISTRATION" },
     },
   };
+}
+
+// État en mémoire du module — se réinitialise au reload, pas de vraie
+// persistance tant que le backend n'expose pas /api/v1/products.
+let products: Product[] = [
+  { id: "prod_1", name: "Coca", priceCents: 700, category: "Boissons", available: true },
+  { id: "prod_2", name: "Sandwich Thon", priceCents: 1500, category: "Snacks", available: true },
+  { id: "prod_3", name: "Tajine Poulet", priceCents: 3500, category: "Plats", available: true },
+];
+
+type CreateProductRequestBody = { name?: unknown; priceCents?: unknown; category?: unknown };
+
+function handleCreateProduct(options?: RequestInit): ApiResult<Product> {
+  const body = parseJsonBody<CreateProductRequestBody>(options);
+  const name = typeof body?.name === "string" ? body.name.trim() : "";
+  const priceCents = typeof body?.priceCents === "number" ? body.priceCents : NaN;
+  const category = typeof body?.category === "string" ? body.category.trim() : "";
+
+  if (!name || !Number.isFinite(priceCents) || priceCents <= 0 || !category) {
+    return {
+      ok: false,
+      error: { code: "VALIDATION_ERROR", message: getErrorMessage("VALIDATION_ERROR"), status: 422 },
+    };
+  }
+
+  const input: CreateProductInput = { name, priceCents, category };
+  const product: Product = {
+    id: `prod_${Math.random().toString(36).slice(2, 10)}`,
+    ...input,
+    available: true,
+  };
+
+  products = [...products, product];
+
+  return { ok: true, data: product };
 }
 
 type MockHandler = (options?: RequestInit) => ApiResult<unknown>;
@@ -93,6 +129,9 @@ const mockHandlers: Record<string, MockHandler> = {
   }),
 
   "POST /api/v1/auth/login": handleLogin,
+
+  "GET /api/v1/products": () => ({ ok: true, data: products }),
+  "POST /api/v1/products": handleCreateProduct,
 };
 
 export function resolveMock<T>(path: string, options?: RequestInit): ApiResult<T> {
