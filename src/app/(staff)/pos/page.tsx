@@ -7,6 +7,8 @@ import { LoadingState } from "@/components/states/loading-state";
 import { EmptyState } from "@/components/states/empty-state";
 import { ErrorState } from "@/components/states/error-state";
 import { CloseSessionPanel } from "./close-session-panel";
+import { getErrorMessage } from "@/lib/error-messages";
+import { MockPrinterAdapter, type PrintableTicket } from "@/lib/hardware/printer";
 import type { ApiError } from "@/lib/api/types";
 import type { Product } from "@/lib/api/catalogue-types";
 import type {
@@ -253,6 +255,37 @@ function TicketScreen({
   rushMode: boolean;
   onNewSale: () => void;
 }) {
+  const [printStatus, setPrintStatus] = useState<"idle" | "printing" | "success" | "error">("idle");
+  const [printError, setPrintError] = useState<ApiError | null>(null);
+
+  async function handlePrint() {
+    if (printStatus === "printing") return;
+
+    setPrintStatus("printing");
+    setPrintError(null);
+
+    const ticket: PrintableTicket = {
+      code: order.code,
+      items: order.items.map(({ productName, quantity, subtotalCents }) => ({
+        productName,
+        quantity,
+        subtotalCents,
+      })),
+      totalCents: order.totalCents,
+      paymentMethod: order.paymentMethod,
+      paidAt: order.paidAt,
+    };
+
+    const result = await MockPrinterAdapter.print(ticket);
+
+    if (result.ok) {
+      setPrintStatus("success");
+    } else {
+      setPrintStatus("error");
+      setPrintError(result.error);
+    }
+  }
+
   return (
     <div className="flex min-h-[60vh] items-center justify-center">
       <div className="w-full max-w-sm rounded-lg border border-border bg-surface-raised p-6">
@@ -283,8 +316,23 @@ function TicketScreen({
 
         <button
           type="button"
+          onClick={handlePrint}
+          disabled={printStatus === "printing"}
+          className="mt-6 w-full rounded-md border border-border bg-surface px-4 py-2 text-sm text-text transition-colors hover:bg-surface-raised disabled:opacity-50"
+        >
+          {printStatus === "printing" ? "Impression..." : "Imprimer le ticket"}
+        </button>
+
+        {printStatus === "error" && printError ? (
+          <p className="mt-2 text-center text-xs text-status-alert">
+            {getErrorMessage(printError.code)} — le paiement reste validé.
+          </p>
+        ) : null}
+
+        <button
+          type="button"
           onClick={onNewSale}
-          className="mt-6 w-full rounded-md bg-brand px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90"
+          className="mt-2 w-full rounded-md bg-brand px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90"
         >
           {rushMode ? "Suivant" : "Nouvelle vente"}
         </button>
