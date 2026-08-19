@@ -73,6 +73,7 @@ const navItems: {
     label: "KDS",
     href: "/kds",
     section: "kds",
+    implemented: true,
     icon: (
       <NavIcon>
         <rect x="3" y="4" width="18" height="12" rx="2" />

@@ -1,9 +1,9 @@
 "use client";
 
-import { use, useState } from "react";
+import { use } from "react";
 import Link from "next/link";
-import { apiFetch } from "@/lib/api/client";
 import { useApiQuery } from "@/lib/api/use-api";
+import { useOrderTransition } from "@/lib/api/use-order-transition";
 import { useRole } from "@/lib/role-context";
 import { LoadingState } from "@/components/states/loading-state";
 import { ErrorState } from "@/components/states/error-state";
@@ -15,7 +15,6 @@ import {
   type Order,
   type OrderStatus,
 } from "@/lib/api/orders-types";
-import type { ApiError } from "@/lib/api/types";
 import type { Role } from "@/lib/roles";
 
 function formatPrice(priceCents: number): string {
@@ -66,30 +65,9 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const { id } = use(params);
   const { role } = useRole();
   const { status, data, error, refetch } = useApiQuery<Order>(`/api/v1/orders/${id}`);
-
-  const [pendingTarget, setPendingTarget] = useState<OrderStatus | null>(null);
-  const [actionError, setActionError] = useState<ApiError | null>(null);
-
-  async function handleTransition(targetStatus: OrderStatus) {
-    if (pendingTarget) return;
-
-    setPendingTarget(targetStatus);
-    setActionError(null);
-
-    const result = await apiFetch<Order>(`/api/v1/orders/${id}/transition`, {
-      method: "POST",
-      body: JSON.stringify({ targetStatus }),
-    });
-
-    setPendingTarget(null);
-
-    if (!result.ok) {
-      setActionError(result.error);
-      return;
-    }
-
-    refetch();
-  }
+  const { pendingTarget, error: actionError, transition: handleTransition } = useOrderTransition(id, () =>
+    refetch(),
+  );
 
   return (
     <div>
