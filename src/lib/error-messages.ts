@@ -14,6 +14,7 @@ export const ERROR_MESSAGES: Record<string, string> = {
   RATE_LIMITED: "Trop de tentatives, veuillez patienter avant de réessayer.",
   INTERNAL_ERROR: "Une erreur inattendue est survenue côté serveur.",
   VALIDATION_ERROR: "Certaines informations saisies sont invalides — vérifiez le nom, le prix et la catégorie.",
+  SESSION_ALREADY_OPEN: "Une session de caisse est déjà ouverte.",
 };
 
 export const DEFAULT_ERROR_MESSAGE = "Une erreur est survenue.";

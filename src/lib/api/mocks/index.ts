@@ -8,7 +8,7 @@ import type { Role } from "@/lib/roles";
 import type { ApiResult } from "../types";
 import type { CreateProductInput, Product } from "../catalogue-types";
 import { ORDER_TRANSITIONS, type Order, type OrderStatus } from "../orders-types";
-import type { CartItem, CartPriceResult } from "../pos-types";
+import type { CartItem, CartPriceResult, CashSession, CreatedOrder, PaymentMethod } from "../pos-types";
 
 // État en mémoire du module — se réinitialise au reload, pas de vraie
 // persistance tant que le backend n'expose pas /api/v1/orders.
@@ -175,20 +175,17 @@ type CartPriceRequestItem = { productId?: unknown; quantity?: unknown };
 type CartPriceRequestBody = { items?: unknown };
 
 /**
- * Mock illustrant le principe "jamais de prix autoritaire côté client" :
- * le payload attendu ({ productId, quantity }) ne contient volontairement
- * aucun prix — le total est toujours recalculé ici à partir de `products`.
- * À remplacer par le vrai calcul backend (avec, en plus, les règles de
- * stock/quotas réelles) dès qu'il sera disponible.
+ * Recalcule toujours le total à partir de `products` — jamais des prix
+ * envoyés par le client. Réutilisée par /pos/cart/price ET /pos/orders,
+ * pour que la commande finale soit tarifée exactement comme l'aperçu.
  */
-function handlePriceCart(options?: RequestInit): ApiResult<CartPriceResult> {
-  const body = parseJsonBody<CartPriceRequestBody>(options);
-  const rawItems: unknown[] = Array.isArray(body?.items) ? body.items : [];
+function priceCartItems(rawItems: unknown): ApiResult<CartPriceResult> {
+  const list: unknown[] = Array.isArray(rawItems) ? rawItems : [];
 
   const items: CartItem[] = [];
   let totalCents = 0;
 
-  for (const rawItem of rawItems) {
+  for (const rawItem of list) {
     const candidate = rawItem as CartPriceRequestItem;
     const productId = typeof candidate.productId === "string" ? candidate.productId : null;
     const quantity =
@@ -221,6 +218,17 @@ function handlePriceCart(options?: RequestInit): ApiResult<CartPriceResult> {
   }
 
   return { ok: true, data: { items, totalCents } };
+}
+
+/**
+ * Mock illustrant le principe "jamais de prix autoritaire côté client" :
+ * le payload attendu ({ productId, quantity }) ne contient volontairement
+ * aucun prix. À remplacer par le vrai calcul backend (avec, en plus, les
+ * règles de stock/quotas réelles) dès qu'il sera disponible.
+ */
+function handlePriceCart(options?: RequestInit): ApiResult<CartPriceResult> {
+  const body = parseJsonBody<CartPriceRequestBody>(options);
+  return priceCartItems(body?.items);
 }
 
 function handleGetOrder(id: string): ApiResult<Order> {
@@ -260,6 +268,113 @@ function handleOrderTransition(id: string, options?: RequestInit): ApiResult<Ord
   return { ok: true, data: order };
 }
 
+// État en mémoire du module — une seule session à la fois, se réinitialise
+// au reload. Pas de vraie clôture avec écarts ici (prévue en W7).
+let currentSession: CashSession | null = null;
+
+type SessionOpenRequestBody = { openingCashCents?: unknown };
+
+function handleOpenSession(options?: RequestInit): ApiResult<CashSession> {
+  if (currentSession && currentSession.status === "OPEN") {
+    return {
+      ok: false,
+      error: { code: "SESSION_ALREADY_OPEN", message: getErrorMessage("SESSION_ALREADY_OPEN"), status: 409 },
+    };
+  }
+
+  const body = parseJsonBody<SessionOpenRequestBody>(options);
+  const openingCashCents =
+    typeof body?.openingCashCents === "number" &&
+    Number.isFinite(body.openingCashCents) &&
+    body.openingCashCents >= 0
+      ? body.openingCashCents
+      : null;
+
+  if (openingCashCents === null) {
+    return {
+      ok: false,
+      error: { code: "VALIDATION_ERROR", message: getErrorMessage("VALIDATION_ERROR"), status: 422 },
+    };
+  }
+
+  currentSession = {
+    id: `sess_${Math.random().toString(36).slice(2, 10)}`,
+    openedAt: new Date().toISOString(),
+    openingCashCents,
+    status: "OPEN",
+  };
+
+  return { ok: true, data: currentSession };
+}
+
+function nextOrderCode(): string {
+  const numbers = orders
+    .map((order) => Number.parseInt(order.code.replace(/^\D+/, ""), 10))
+    .filter((value) => Number.isFinite(value));
+  const max = numbers.length > 0 ? Math.max(...numbers) : 1041;
+  return `A-${max + 1}`;
+}
+
+type PosOrderRequestBody = { items?: unknown; paymentMethod?: unknown };
+
+/**
+ * Simplification MVP : un paiement CASH/TPE encaissé passe directement en
+ * "PAID", sans étape AWAITING_PAYMENT intermédiaire (pas de flux de
+ * paiement asynchrone/à distance dans ce mock). À revoir avec le vrai flux
+ * backend, où AWAITING_PAYMENT sert probablement pour TPE réel/QR mobile.
+ */
+function handleCreatePosOrder(options?: RequestInit): ApiResult<CreatedOrder> {
+  if (!currentSession || currentSession.status !== "OPEN") {
+    return {
+      ok: false,
+      error: { code: "POS_SESSION_NOT_OPEN", message: getErrorMessage("POS_SESSION_NOT_OPEN"), status: 409 },
+    };
+  }
+
+  const body = parseJsonBody<PosOrderRequestBody>(options);
+  const paymentMethod: PaymentMethod | null =
+    body?.paymentMethod === "CASH" || body?.paymentMethod === "CARD" ? body.paymentMethod : null;
+
+  if (!paymentMethod) {
+    return {
+      ok: false,
+      error: { code: "VALIDATION_ERROR", message: getErrorMessage("VALIDATION_ERROR"), status: 422 },
+    };
+  }
+
+  const priced = priceCartItems(body?.items);
+  if (!priced.ok) return priced;
+
+  const paidAt = new Date().toISOString();
+  const newOrder: Order = {
+    id: `ord_${Math.random().toString(36).slice(2, 10)}`,
+    code: nextOrderCode(),
+    status: "PAID",
+    items: priced.data.items.map(({ productName, quantity, unitPriceCents }) => ({
+      productName,
+      quantity,
+      priceCents: unitPriceCents,
+    })),
+    totalCents: priced.data.totalCents,
+    createdAt: paidAt,
+    channel: "POS",
+  };
+
+  orders.push(newOrder);
+
+  return {
+    ok: true,
+    data: {
+      id: newOrder.id,
+      code: newOrder.code,
+      items: priced.data.items,
+      totalCents: newOrder.totalCents,
+      paymentMethod,
+      paidAt,
+    },
+  };
+}
+
 const ORDER_DETAIL_PATTERN = /^\/api\/v1\/orders\/([^/]+)$/;
 const ORDER_TRANSITION_PATTERN = /^\/api\/v1\/orders\/([^/]+)\/transition$/;
 
@@ -287,6 +402,10 @@ const mockHandlers: Record<string, MockHandler> = {
   "POST /api/v1/products": handleCreateProduct,
 
   "POST /api/v1/pos/cart/price": handlePriceCart,
+
+  "GET /api/v1/pos/session/current": () => ({ ok: true, data: currentSession }),
+  "POST /api/v1/pos/session/open": handleOpenSession,
+  "POST /api/v1/pos/orders": handleCreatePosOrder,
 };
 
 export function resolveMock<T>(path: string, options?: RequestInit): ApiResult<T> {
