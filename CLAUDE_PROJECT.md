@@ -44,7 +44,7 @@ git checkout -b feature/web-<nom-etape>
 - Jamais de push direct sur `main`. Jamais de push direct sur `develop` sans validation locale complète.
 - Avant tout push : `npm run lint`, `npm run typecheck` (ou `tsc --noEmit`), `npm run build`.
 - Commits : `feat:`, `fix:`, `refactor:`, `test:`, `docs:`, `chore:`.
-- Push vers `origin feature/web-...`, PR vers `develop`.
+- Push vers `origin feature/web-...`, merge vers `develop` (localement si l'UI GitHub bloque, jamais vers `main`).
 
 ---
 
@@ -54,9 +54,9 @@ Pour chaque étape de la roadmap :
 
 1. Claude Code explique brièvement le but de l'étape.
 2. Claude Code propose les commandes/fichiers exacts.
-3. Hamza exécute et lance `npm run dev` pour vérifier visuellement (design, couleurs, comportement).
+3. Hamza exécute et lance `npm run dev` pour vérifier visuellement (design, couleurs, comportement) — y compris les deux thèmes clair/sombre après rechargement (`F5`).
 4. Vérification ensemble : rendu correct, pas d'erreur console, lint/typecheck/build OK.
-5. Une fois validé → commit → push sur la branche `feature/web-...` → PR vers `develop` (jamais `main`).
+5. Une fois validé → commit → push sur la branche `feature/web-...` → merge vers `develop` (jamais `main`).
 6. Mise à jour du bloc `CURRENT_STATUS` ci-dessous.
 7. Passage à l'étape suivante seulement après validation explicite de Hamza.
 
@@ -67,7 +67,7 @@ Ne jamais sauter plusieurs étapes d'un coup. Ne jamais scaffolder/modifier en m
 ## 4. Roadmap W0 → W14
 
 - **W0 — Audit repo** ✅ *(terminé : repo quasi vide, `develop`/`main` identiques, Node v24.14.1, npm 11.11.0)*
-- **W1 — Shell / Design / RBAC** : scaffold Next.js, layout staff, login shell, navigation par rôle, design tokens, états loading/error/empty.
+- **W1 — Shell / Design / RBAC** : scaffold Next.js ✅, design tokens + layout + login ✅, navigation par rôle + états loading/error/empty (en cours).
 - **W2 — API / Auth / Erreurs** : client API typé, auth + refresh token, mapping `error.code`, mocks alignés sur l'OpenAPI (43 paths cibles).
 - **W3 — Catalogue + premier vertical slice** : Admin crée un produit → API/DB → visible côté Mobile.
 - **W4 — Orders dashboard** : liste/détail des commandes, états, actions selon permissions.
@@ -94,36 +94,49 @@ Ne jamais sauter à une étape avancée (ex. W12) parce qu'elle est visuellement
 - États loading / empty / error (par `code`) / succès gérés.
 - Double-submit protégé si action critique.
 - Données rafraîchies depuis le serveur après mutation.
-- `npm run dev` vérifié visuellement par Hamza (design, couleurs, comportement).
+- `npm run dev` vérifié visuellement par Hamza (design, couleurs, comportement, y compris thème sombre après F5).
 - Lint + typecheck + build OK.
 - Aucun secret commité.
 - Push sur `feature/web-...`, jamais sur `main`.
 
 ---
 
-## 6. CURRENT_STATUS
+## 6. Design tokens (référence — v3, confirmée)
+
+**Sombre** : fond `#16283F`, surface `#1E3352`, surface élevée `#274064`, bordure `#3A5478`, texte `#F5F7FA`, texte secondaire `#A9B7CC`, accent marque `#B01552` (magenta), accent chaud secondaire `#E8542A`.
+
+**Clair** : fond `#F5F7FA`, surface `#FFFFFF`, bordure `#D8E0EC`, texte `#16283F`, texte secondaire `#5C6B85`, accent marque `#B01552`.
+
+**Statuts** (identiques dans les deux thèmes) : à préparer `#F5A623`, en préparation `#2DB4C7`, prête `#22C55E`, problème/annulé `#EF4444`.
+
+**Typo** : IBM Plex Sans (UI), IBM Plex Mono (données/codes/montants). Signature visuelle : motif "ticket rail" (séparation en pointillés) entre nav et contenu.
+
+---
+
+## 7. CURRENT_STATUS
 
 ```text
 Project: SUP2I FOOD
 Repo: sup2i-food-web
 Base branch: develop
-Working branch: feature/web-bootstrap
-Current milestone: W1 — Shell / Design / RBAC (en cours)
+Working branch: (à définir pour W1.3)
+Current milestone: W1 — Shell / Design / RBAC (tokens + layout + login faits, reste navigation par rôle + états loading/error/empty)
 Completed:
 - W0: audit repo terminé
-- Scaffold Next.js (TypeScript, App Router, src/, Tailwind, alias @/*)
+- Scaffold Next.js (TypeScript, App Router, src/, Tailwind, alias @/*) — mergé sur develop
+- Design tokens (couleurs v3 marine/magenta, IBM Plex Sans/Mono) + layout staff + toggle thème sombre/clair persistant + login shell — mergé sur develop
 Validated:
-- lint: -
-- typecheck: -
+- lint: OK
+- typecheck: OK (via build)
 - tests: -
-- build: -
+- build: OK
 Backend dependencies:
 - ready: PostgreSQL/Flyway opérationnels, Organization/Campus/Location compilent
 - pending: JWT/RBAC réel, endpoints métier (43 paths cibles, pas tous implémentés)
 Open decisions:
 - Cactus/PHP: audit non démarré
 Next exact action:
-- vérifier npm run dev, lint, build puis commit initial du scaffold
+- W1.3: navigation filtrée par rôle (rôles simulés) + composants loading/error/empty réutilisables
 ```
 
 *(Ce bloc doit être mis à jour à chaque étape validée — ne jamais écrire "terminé" sans exécution réelle des validations.)*
