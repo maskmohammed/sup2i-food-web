@@ -53,6 +53,19 @@ export function RoleProvider({ children }: { children: ReactNode }) {
   return <RoleContext.Provider value={{ role, setRole }}>{children}</RoleContext.Provider>;
 }
 
+/**
+ * Utilisé par AuthProvider pour proposer le rôle renvoyé par le login (mock)
+ * comme valeur initiale du sélecteur dev — sans jamais écraser un choix déjà
+ * fait manuellement dans le sélecteur. Temporaire tant que l'auth réelle
+ * backend ne fournit pas le vrai rôle RBAC.
+ */
+export function setInitialRoleFromAuth(role: Role) {
+  if (typeof window === "undefined") return;
+  if (window.localStorage.getItem(STORAGE_KEY)) return;
+  window.localStorage.setItem(STORAGE_KEY, role);
+  window.dispatchEvent(new Event(ROLE_CHANGE_EVENT));
+}
+
 export function useRole(): RoleContextValue {
   const ctx = useContext(RoleContext);
   if (!ctx) {

@@ -4,6 +4,7 @@
  * Dev Backend. Codes d'erreur : voir src/lib/error-messages.ts.
  */
 import { getErrorMessage } from "@/lib/error-messages";
+import type { Role } from "@/lib/roles";
 import type { ApiResult } from "../types";
 
 export type OrderStatus =
@@ -30,7 +31,50 @@ const mockOrders: MockOrder[] = [
   { id: "ord_3", reference: "A-1044", status: "READY", totalCents: 640 },
 ];
 
-type MockHandler = () => ApiResult<unknown>;
+export type MockLoginResponse = {
+  token: string;
+  user: { name: string; role: Role };
+};
+
+type LoginRequestBody = { identifiant?: unknown; motDePasse?: unknown };
+
+function parseJsonBody(options?: RequestInit): LoginRequestBody | null {
+  if (typeof options?.body !== "string") return null;
+  try {
+    return JSON.parse(options.body) as LoginRequestBody;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Mock du flux de login — ce n'est PAS le vrai flux JWT/refresh du backend
+ * (voir CLAUDE_PROJECT.md, "pending: JWT/RBAC réel"). Le token est une
+ * chaîne factice et le rôle retourné est toujours ADMINISTRATION par
+ * défaut, faute de vraie permissions matrix au login pour l'instant.
+ */
+function handleLogin(options?: RequestInit): ApiResult<MockLoginResponse> {
+  const body = parseJsonBody(options);
+  const identifiant = typeof body?.identifiant === "string" ? body.identifiant : "";
+  const motDePasse = typeof body?.motDePasse === "string" ? body.motDePasse : "";
+
+  if (motDePasse === "wrong") {
+    return {
+      ok: false,
+      error: { code: "UNAUTHORIZED", message: getErrorMessage("UNAUTHORIZED"), status: 401 },
+    };
+  }
+
+  return {
+    ok: true,
+    data: {
+      token: `mock-jwt-${Math.random().toString(36).slice(2, 10)}`,
+      user: { name: identifiant || "Utilisateur", role: "ADMINISTRATION" },
+    },
+  };
+}
+
+type MockHandler = (options?: RequestInit) => ApiResult<unknown>;
 
 /** Clé = "MÉTHODE chemin". Pas de vraie route Next — juste un registre en mémoire. */
 const mockHandlers: Record<string, MockHandler> = {
@@ -47,6 +91,8 @@ const mockHandlers: Record<string, MockHandler> = {
       status: 409,
     },
   }),
+
+  "POST /api/v1/auth/login": handleLogin,
 };
 
 export function resolveMock<T>(path: string, options?: RequestInit): ApiResult<T> {
@@ -64,5 +110,5 @@ export function resolveMock<T>(path: string, options?: RequestInit): ApiResult<T
     };
   }
 
-  return handler() as ApiResult<T>;
+  return handler(options) as ApiResult<T>;
 }
