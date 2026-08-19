@@ -54,7 +54,8 @@ export type NavSectionId =
   | "cantine"
   | "administration"
   | "direction"
-  | "catalogue";
+  | "catalogue"
+  | "orders";
 
 /**
  * Proposition frontend d'accès par section, à valider avec le Dev Backend /
@@ -70,6 +71,7 @@ export const NAV_SECTION_ROLES: Record<NavSectionId, Role[]> = {
   administration: ["ADMINISTRATION", "SYSTEM_ADMIN"],
   direction: ["DIRECTION", "FINANCE", "SYSTEM_ADMIN"],
   catalogue: ["ADMINISTRATION", "SYSTEM_ADMIN"],
+  orders: ["CASHIER", "SNACK_MANAGER", "KITCHEN_STAFF", "ADMINISTRATION", "SYSTEM_ADMIN"],
 };
 
 export function canAccessSection(role: Role, section: NavSectionId): boolean {

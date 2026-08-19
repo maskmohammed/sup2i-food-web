@@ -1,5 +1,3 @@
-import { OrdersApiDemo } from "./orders-api-demo";
-
 const statusCards: { label: string; value: number; colorClass: string }[] = [
   { label: "En attente", value: 3, colorClass: "bg-status-queued" },
   { label: "En préparation", value: 2, colorClass: "bg-status-preparing" },
@@ -33,13 +31,6 @@ export default function DashboardPage() {
             </div>
           </div>
         ))}
-      </div>
-
-      <div className="mt-10 rounded-lg border border-dashed border-accent-warm p-4">
-        <p className="mb-4 text-xs font-semibold uppercase tracking-wide text-accent-warm">
-          Démo client API (mock) — à retirer plus tard
-        </p>
-        <OrdersApiDemo />
       </div>
     </div>
   );

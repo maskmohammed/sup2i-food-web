@@ -7,29 +7,89 @@ import { getErrorMessage } from "@/lib/error-messages";
 import type { Role } from "@/lib/roles";
 import type { ApiResult } from "../types";
 import type { CreateProductInput, Product } from "../catalogue-types";
+import { ORDER_TRANSITIONS, type Order, type OrderStatus } from "../orders-types";
 
-export type OrderStatus =
-  | "DRAFT"
-  | "CREATED"
-  | "AWAITING_PAYMENT"
-  | "PAID"
-  | "QUEUED"
-  | "PREPARING"
-  | "READY"
-  | "COLLECTED"
-  | "COMPLETED";
-
-export type MockOrder = {
-  id: string;
-  reference: string;
-  status: OrderStatus;
-  totalCents: number;
-};
-
-const mockOrders: MockOrder[] = [
-  { id: "ord_1", reference: "A-1042", status: "PREPARING", totalCents: 850 },
-  { id: "ord_2", reference: "A-1043", status: "QUEUED", totalCents: 1200 },
-  { id: "ord_3", reference: "A-1044", status: "READY", totalCents: 640 },
+// État en mémoire du module — se réinitialise au reload, pas de vraie
+// persistance tant que le backend n'expose pas /api/v1/orders.
+const orders: Order[] = [
+  {
+    id: "ord_1",
+    code: "A-1042",
+    status: "DRAFT",
+    items: [{ productName: "Coca", quantity: 2, priceCents: 700 }],
+    totalCents: 1400,
+    createdAt: "2026-08-19T08:05:00.000Z",
+    channel: "POS",
+  },
+  {
+    id: "ord_2",
+    code: "A-1043",
+    status: "AWAITING_PAYMENT",
+    items: [
+      { productName: "Sandwich Thon", quantity: 1, priceCents: 1500 },
+      { productName: "Coca", quantity: 1, priceCents: 700 },
+    ],
+    totalCents: 2200,
+    createdAt: "2026-08-19T08:12:00.000Z",
+    channel: "MOBILE",
+  },
+  {
+    id: "ord_3",
+    code: "A-1044",
+    status: "PAID",
+    items: [{ productName: "Tajine Poulet", quantity: 1, priceCents: 3500 }],
+    totalCents: 3500,
+    createdAt: "2026-08-19T08:20:00.000Z",
+    channel: "POS",
+  },
+  {
+    id: "ord_4",
+    code: "A-1045",
+    status: "QUEUED",
+    items: [{ productName: "Coca", quantity: 3, priceCents: 700 }],
+    totalCents: 2100,
+    createdAt: "2026-08-19T08:28:00.000Z",
+    channel: "MOBILE",
+  },
+  {
+    id: "ord_5",
+    code: "A-1046",
+    status: "PREPARING",
+    items: [{ productName: "Sandwich Thon", quantity: 2, priceCents: 1500 }],
+    totalCents: 3000,
+    createdAt: "2026-08-19T08:33:00.000Z",
+    channel: "POS",
+  },
+  {
+    id: "ord_6",
+    code: "A-1047",
+    status: "READY",
+    items: [
+      { productName: "Tajine Poulet", quantity: 1, priceCents: 3500 },
+      { productName: "Coca", quantity: 1, priceCents: 700 },
+    ],
+    totalCents: 4200,
+    createdAt: "2026-08-19T08:40:00.000Z",
+    channel: "MOBILE",
+  },
+  {
+    id: "ord_7",
+    code: "A-1048",
+    status: "COMPLETED",
+    items: [{ productName: "Coca", quantity: 1, priceCents: 700 }],
+    totalCents: 700,
+    createdAt: "2026-08-19T07:50:00.000Z",
+    channel: "POS",
+  },
+  {
+    id: "ord_8",
+    code: "A-1049",
+    status: "CANCELLED",
+    items: [{ productName: "Sandwich Thon", quantity: 1, priceCents: 1500 }],
+    totalCents: 1500,
+    createdAt: "2026-08-19T07:58:00.000Z",
+    channel: "MOBILE",
+  },
 ];
 
 export type MockLoginResponse = {
@@ -110,13 +170,53 @@ function handleCreateProduct(options?: RequestInit): ApiResult<Product> {
   return { ok: true, data: product };
 }
 
+function handleGetOrder(id: string): ApiResult<Order> {
+  const order = orders.find((candidate) => candidate.id === id);
+  if (!order) {
+    return {
+      ok: false,
+      error: { code: "INTERNAL_ERROR", message: getErrorMessage("INTERNAL_ERROR"), status: 404 },
+    };
+  }
+  return { ok: true, data: order };
+}
+
+type TransitionRequestBody = { targetStatus?: unknown };
+
+function handleOrderTransition(id: string, options?: RequestInit): ApiResult<Order> {
+  const order = orders.find((candidate) => candidate.id === id);
+  if (!order) {
+    return {
+      ok: false,
+      error: { code: "INTERNAL_ERROR", message: getErrorMessage("INTERNAL_ERROR"), status: 404 },
+    };
+  }
+
+  const body = parseJsonBody<TransitionRequestBody>(options);
+  const targetStatus = typeof body?.targetStatus === "string" ? (body.targetStatus as OrderStatus) : null;
+
+  if (!targetStatus || !ORDER_TRANSITIONS[order.status].includes(targetStatus)) {
+    return {
+      ok: false,
+      error: { code: "INVALID_ORDER_STATUS", message: getErrorMessage("INVALID_ORDER_STATUS"), status: 409 },
+    };
+  }
+
+  order.status = targetStatus;
+
+  return { ok: true, data: order };
+}
+
+const ORDER_DETAIL_PATTERN = /^\/api\/v1\/orders\/([^/]+)$/;
+const ORDER_TRANSITION_PATTERN = /^\/api\/v1\/orders\/([^/]+)\/transition$/;
+
 type MockHandler = (options?: RequestInit) => ApiResult<unknown>;
 
 /** Clé = "MÉTHODE chemin". Pas de vraie route Next — juste un registre en mémoire. */
 const mockHandlers: Record<string, MockHandler> = {
   "GET /api/v1/health": () => ({ ok: true, data: { status: "ok" } }),
 
-  "GET /api/v1/orders": () => ({ ok: true, data: mockOrders }),
+  "GET /api/v1/orders": () => ({ ok: true, data: orders }),
 
   // Endpoint de démonstration uniquement, pour tester le flux error-state.
   "GET /api/v1/demo/out-of-stock": () => ({
@@ -136,6 +236,16 @@ const mockHandlers: Record<string, MockHandler> = {
 
 export function resolveMock<T>(path: string, options?: RequestInit): ApiResult<T> {
   const method = (options?.method ?? "GET").toUpperCase();
+
+  if (method === "GET") {
+    const match = path.match(ORDER_DETAIL_PATTERN);
+    if (match) return handleGetOrder(match[1]) as ApiResult<T>;
+  }
+  if (method === "POST") {
+    const match = path.match(ORDER_TRANSITION_PATTERN);
+    if (match) return handleOrderTransition(match[1], options) as ApiResult<T>;
+  }
+
   const handler = mockHandlers[`${method} ${path}`];
 
   if (!handler) {
