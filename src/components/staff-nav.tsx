@@ -86,6 +86,7 @@ const navItems: {
     label: "Stock",
     href: "/stock",
     section: "stock",
+    implemented: true,
     icon: (
       <NavIcon>
         <path d="M21 8l-9-5-9 5 9 5 9-5z" />

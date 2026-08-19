@@ -17,6 +17,7 @@ import type {
   CreatedOrder,
   PaymentMethod,
 } from "../pos-types";
+import type { StockItem, StockMovement } from "../inventory-types";
 
 // État en mémoire du module — se réinitialise au reload, pas de vraie
 // persistance tant que le backend n'expose pas /api/v1/orders.
@@ -239,6 +240,101 @@ function handlePriceCart(options?: RequestInit): ApiResult<CartPriceResult> {
   return priceCartItems(body?.items);
 }
 
+// Un StockItem par produit catalogue, quantités/seuils de départ
+// arbitraires mais raisonnables pour la démo (Sandwich Thon volontairement
+// sous son seuil pour visualiser l'indicateur "stock bas").
+const stockSeed: Record<string, { quantityOnHand: number; unit: string; lowStockThreshold: number }> = {
+  prod_1: { quantityOnHand: 40, unit: "unité", lowStockThreshold: 10 },
+  prod_2: { quantityOnHand: 6, unit: "unité", lowStockThreshold: 10 },
+  prod_3: { quantityOnHand: 15, unit: "unité", lowStockThreshold: 5 },
+};
+
+const stockItems: StockItem[] = products.map((product) => {
+  const seed = stockSeed[product.id] ?? { quantityOnHand: 20, unit: "unité", lowStockThreshold: 5 };
+  return {
+    id: `stock_${product.id}`,
+    productId: product.id,
+    productName: product.name,
+    ...seed,
+  };
+});
+
+let stockMovements: StockMovement[] = [];
+
+type StockAdjustRequestBody = { quantityDelta?: unknown; reason?: unknown };
+
+/**
+ * VALIDATION_ERROR (pas OUT_OF_STOCK) si l'ajustement ferait passer la
+ * quantité sous 0 — voir l'explication en tête de section : c'est une
+ * donnée saisie incohérente avec l'état actuel, pas un signal de vente.
+ */
+function handleAdjustStock(stockItemId: string, options?: RequestInit): ApiResult<StockItem> {
+  const item = stockItems.find((candidate) => candidate.id === stockItemId);
+  if (!item) {
+    return {
+      ok: false,
+      error: { code: "INTERNAL_ERROR", message: getErrorMessage("INTERNAL_ERROR"), status: 404 },
+    };
+  }
+
+  const body = parseJsonBody<StockAdjustRequestBody>(options);
+  const quantityDelta =
+    typeof body?.quantityDelta === "number" && Number.isFinite(body.quantityDelta) ? body.quantityDelta : null;
+  const reason = typeof body?.reason === "string" ? body.reason.trim() : "";
+
+  if (quantityDelta === null || quantityDelta === 0 || !reason) {
+    return {
+      ok: false,
+      error: { code: "VALIDATION_ERROR", message: getErrorMessage("VALIDATION_ERROR"), status: 422 },
+    };
+  }
+
+  const nextQuantity = item.quantityOnHand + quantityDelta;
+  if (nextQuantity < 0) {
+    return {
+      ok: false,
+      error: { code: "VALIDATION_ERROR", message: getErrorMessage("VALIDATION_ERROR"), status: 422 },
+    };
+  }
+
+  item.quantityOnHand = nextQuantity;
+
+  const movement: StockMovement = {
+    id: `mov_${Math.random().toString(36).slice(2, 10)}`,
+    stockItemId: item.id,
+    type: "ADJUSTMENT",
+    quantityDelta,
+    reason,
+    createdAt: new Date().toISOString(),
+    // Pas d'identité utilisateur propagée jusqu'au mock pour l'instant
+    // (apiFetch n'attache aucun token aux requêtes) — à corriger quand
+    // l'auth réelle circulera jusqu'ici.
+    createdBy: "Staff (mode dev)",
+  };
+  stockMovements = [movement, ...stockMovements];
+
+  return { ok: true, data: item };
+}
+
+function handleGetStockMovements(stockItemId: string): ApiResult<StockMovement[]> {
+  const exists = stockItems.some((item) => item.id === stockItemId);
+  if (!exists) {
+    return {
+      ok: false,
+      error: { code: "INTERNAL_ERROR", message: getErrorMessage("INTERNAL_ERROR"), status: 404 },
+    };
+  }
+
+  const movements = stockMovements
+    .filter((movement) => movement.stockItemId === stockItemId)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+
+  return { ok: true, data: movements };
+}
+
+const STOCK_ADJUST_PATTERN = /^\/api\/v1\/inventory\/items\/([^/]+)\/adjust$/;
+const STOCK_MOVEMENTS_PATTERN = /^\/api\/v1\/inventory\/items\/([^/]+)\/movements$/;
+
 function handleGetOrder(id: string): ApiResult<Order> {
   const order = orders.find((candidate) => candidate.id === id);
   if (!order) {
@@ -252,6 +348,10 @@ function handleGetOrder(id: string): ApiResult<Order> {
 
 type TransitionRequestBody = { targetStatus?: unknown };
 
+// TODO (étape future, hors scope W8) : quand une commande passe à
+// PREPARING, déduire le stock des ingrédients consommés (StockMovement de
+// type SALE_DEDUCTION). Nécessite un lien recette/ingrédients par produit
+// qui n'existe pas encore dans le catalogue — non implémenté ici.
 function handleOrderTransition(id: string, options?: RequestInit): ApiResult<Order> {
   const order = orders.find((candidate) => candidate.id === id);
   if (!order) {
@@ -506,18 +606,26 @@ const mockHandlers: Record<string, MockHandler> = {
 
   "GET /api/v1/pos/session/summary": handleSessionSummary,
   "POST /api/v1/pos/session/close": handleCloseSession,
+
+  "GET /api/v1/inventory/items": () => ({ ok: true, data: stockItems }),
 };
 
 export function resolveMock<T>(path: string, options?: RequestInit): ApiResult<T> {
   const method = (options?.method ?? "GET").toUpperCase();
 
   if (method === "GET") {
-    const match = path.match(ORDER_DETAIL_PATTERN);
-    if (match) return handleGetOrder(match[1]) as ApiResult<T>;
+    const orderMatch = path.match(ORDER_DETAIL_PATTERN);
+    if (orderMatch) return handleGetOrder(orderMatch[1]) as ApiResult<T>;
+
+    const movementsMatch = path.match(STOCK_MOVEMENTS_PATTERN);
+    if (movementsMatch) return handleGetStockMovements(movementsMatch[1]) as ApiResult<T>;
   }
   if (method === "POST") {
-    const match = path.match(ORDER_TRANSITION_PATTERN);
-    if (match) return handleOrderTransition(match[1], options) as ApiResult<T>;
+    const transitionMatch = path.match(ORDER_TRANSITION_PATTERN);
+    if (transitionMatch) return handleOrderTransition(transitionMatch[1], options) as ApiResult<T>;
+
+    const adjustMatch = path.match(STOCK_ADJUST_PATTERN);
+    if (adjustMatch) return handleAdjustStock(adjustMatch[1], options) as ApiResult<T>;
   }
 
   const handler = mockHandlers[`${method} ${path}`];
