@@ -4,7 +4,7 @@
  * Dev Backend. Codes d'erreur : voir src/lib/error-messages.ts.
  */
 import { getErrorMessage } from "@/lib/error-messages";
-import type { Role } from "@/lib/roles";
+import { ROLES, type Role } from "@/lib/roles";
 import type { ApiResult } from "../types";
 import type { CreateProductInput, Product } from "../catalogue-types";
 import { ORDER_TRANSITIONS, type Order, type OrderStatus } from "../orders-types";
@@ -18,8 +18,10 @@ import type {
   PaymentMethod,
 } from "../pos-types";
 import type { StockItem, StockMovement, WasteReason } from "../inventory-types";
+import { MEAL_TYPE_LABELS } from "../canteen-types";
 import type { FoodPassLookupResult, MealType, MealUsage } from "../canteen-types";
 import type { CreateStudentInput, Student } from "../students-types";
+import type { AuditLogEntry, StaffUser } from "../admin-types";
 
 // État en mémoire du module — se réinitialise au reload, pas de vraie
 // persistance tant que le backend n'expose pas /api/v1/orders.
@@ -147,6 +149,31 @@ function handleLogin(options?: RequestInit): ApiResult<MockLoginResponse> {
   };
 }
 
+// Journal d'audit centralisé — alimenté par les handlers de mutation
+// existants ci-dessous (voir chaque appel recordAudit), pas un système
+// parallèle déconnecté.
+let auditLog: AuditLogEntry[] = [];
+
+type AuditActor = { actorName: string; actorRole: Role };
+
+// Acteur non identifié — auth réelle mock, à relier au vrai utilisateur
+// connecté quand l'auth backend existera (apiFetch n'attache aucun token
+// aux requêtes mock pour l'instant, voir handleAdjustStock plus bas pour
+// la même limite déjà documentée côté mouvements de stock).
+const UNKNOWN_ACTOR: AuditActor = { actorName: "Staff (mode dev)", actorRole: "SYSTEM_ADMIN" };
+
+function recordAudit(action: string, details: string, actor: AuditActor = UNKNOWN_ACTOR): void {
+  const entry: AuditLogEntry = {
+    id: `audit_${Math.random().toString(36).slice(2, 10)}`,
+    actorName: actor.actorName,
+    actorRole: actor.actorRole,
+    action,
+    details,
+    timestamp: new Date().toISOString(),
+  };
+  auditLog = [entry, ...auditLog];
+}
+
 // État en mémoire du module — se réinitialise au reload, pas de vraie
 // persistance tant que le backend n'expose pas /api/v1/products.
 let products: Product[] = [
@@ -178,6 +205,8 @@ function handleCreateProduct(options?: RequestInit): ApiResult<Product> {
   };
 
   products = [...products, product];
+
+  recordAudit("PRODUCT_CREATED", `${product.name} créé à ${(product.priceCents / 100).toFixed(2)} DH`);
 
   return { ok: true, data: product };
 }
@@ -315,6 +344,11 @@ function handleAdjustStock(stockItemId: string, options?: RequestInit): ApiResul
   };
   stockMovements = [movement, ...stockMovements];
 
+  recordAudit(
+    "STOCK_ADJUSTED",
+    `${item.productName} : ${quantityDelta > 0 ? "+" : ""}${quantityDelta} ${item.unit} (${reason})`,
+  );
+
   return { ok: true, data: item };
 }
 
@@ -389,6 +423,8 @@ function handleWasteStock(stockItemId: string, options?: RequestInit): ApiResult
   };
   stockMovements = [movement, ...stockMovements];
 
+  recordAudit("STOCK_WASTED", `${item.productName} : ${quantityDelta} ${item.unit} (${wasteReason})`);
+
   return { ok: true, data: item };
 }
 
@@ -428,6 +464,8 @@ function handleReceiveStock(stockItemId: string, options?: RequestInit): ApiResu
     createdBy: "Staff (mode dev)",
   };
   stockMovements = [movement, ...stockMovements];
+
+  recordAudit("STOCK_RECEIVED", `${item.productName} : +${quantity} ${item.unit}`);
 
   return { ok: true, data: item };
 }
@@ -519,6 +557,8 @@ function handleCreateStudent(options?: RequestInit): ApiResult<Student> {
 
   students = [...students, student];
 
+  recordAudit("STUDENT_CREATED", `${student.fullName} (${student.foodPassCode})`);
+
   return { ok: true, data: student };
 }
 
@@ -542,6 +582,11 @@ function handleUpdateSubscription(studentId: string, options?: RequestInit): Api
   }
 
   student.subscriptionActive = body.active;
+
+  recordAudit(
+    "SUBSCRIPTION_TOGGLED",
+    `${student.fullName} — abonnement ${student.subscriptionActive ? "activé" : "désactivé"}`,
+  );
 
   return { ok: true, data: student };
 }
@@ -681,6 +726,8 @@ function handleDistributeMeal(options?: RequestInit): ApiResult<MealUsage> {
   };
   mealUsages = [usage, ...mealUsages];
 
+  recordAudit("MEAL_DISTRIBUTED", `${student.fullName} — ${MEAL_TYPE_LABELS[mealType]}`);
+
   return { ok: true, data: usage };
 }
 
@@ -720,7 +767,10 @@ function handleOrderTransition(id: string, options?: RequestInit): ApiResult<Ord
     };
   }
 
+  const previousStatus = order.status;
   order.status = targetStatus;
+
+  recordAudit("ORDER_TRANSITIONED", `${order.code} : ${previousStatus} → ${targetStatus}`);
 
   return { ok: true, data: order };
 }
@@ -921,6 +971,77 @@ function handleCloseSession(options?: RequestInit): ApiResult<CashSessionClosure
   return { ok: true, data: closure };
 }
 
+// Comptes staff fictifs (W10.3) — 3-4 rôles différents pour la démo.
+const staffUsers: StaffUser[] = [
+  { id: "user_1", name: "Hamza K.", role: "SYSTEM_ADMIN", active: true, createdAt: "2026-01-01T08:00:00.000Z" },
+  { id: "user_2", name: "Amine T.", role: "CASHIER", active: true, createdAt: "2026-01-05T08:00:00.000Z" },
+  { id: "user_3", name: "Lina B.", role: "KITCHEN_STAFF", active: true, createdAt: "2026-01-10T08:00:00.000Z" },
+  { id: "user_4", name: "Sara M.", role: "STOCK_MANAGER", active: false, createdAt: "2026-01-15T08:00:00.000Z" },
+];
+
+function handleGetUsers(): ApiResult<StaffUser[]> {
+  return { ok: true, data: staffUsers };
+}
+
+function isRoleValue(value: unknown): value is Role {
+  return typeof value === "string" && (ROLES as string[]).includes(value);
+}
+
+type UpdateUserRoleRequestBody = { role?: unknown };
+
+function handleUpdateUserRole(userId: string, options?: RequestInit): ApiResult<StaffUser> {
+  const user = staffUsers.find((candidate) => candidate.id === userId);
+  if (!user) {
+    return {
+      ok: false,
+      error: { code: "INTERNAL_ERROR", message: getErrorMessage("INTERNAL_ERROR"), status: 404 },
+    };
+  }
+
+  const body = parseJsonBody<UpdateUserRoleRequestBody>(options);
+  if (!isRoleValue(body?.role)) {
+    return {
+      ok: false,
+      error: { code: "VALIDATION_ERROR", message: getErrorMessage("VALIDATION_ERROR"), status: 422 },
+    };
+  }
+
+  user.role = body.role;
+
+  return { ok: true, data: user };
+}
+
+type UpdateUserActiveRequestBody = { active?: unknown };
+
+function handleUpdateUserActive(userId: string, options?: RequestInit): ApiResult<StaffUser> {
+  const user = staffUsers.find((candidate) => candidate.id === userId);
+  if (!user) {
+    return {
+      ok: false,
+      error: { code: "INTERNAL_ERROR", message: getErrorMessage("INTERNAL_ERROR"), status: 404 },
+    };
+  }
+
+  const body = parseJsonBody<UpdateUserActiveRequestBody>(options);
+  if (typeof body?.active !== "boolean") {
+    return {
+      ok: false,
+      error: { code: "VALIDATION_ERROR", message: getErrorMessage("VALIDATION_ERROR"), status: 422 },
+    };
+  }
+
+  user.active = body.active;
+
+  return { ok: true, data: user };
+}
+
+function handleGetAuditLog(): ApiResult<AuditLogEntry[]> {
+  return { ok: true, data: auditLog.slice(0, 50) };
+}
+
+const USER_ROLE_PATTERN = /^\/api\/v1\/admin\/users\/([^/]+)\/role$/;
+const USER_ACTIVE_PATTERN = /^\/api\/v1\/admin\/users\/([^/]+)\/active$/;
+
 const ORDER_DETAIL_PATTERN = /^\/api\/v1\/orders\/([^/]+)$/;
 const ORDER_TRANSITION_PATTERN = /^\/api\/v1\/orders\/([^/]+)\/transition$/;
 
@@ -963,6 +1084,9 @@ const mockHandlers: Record<string, MockHandler> = {
 
   "GET /api/v1/admin/students": handleGetStudents,
   "POST /api/v1/admin/students": handleCreateStudent,
+
+  "GET /api/v1/admin/users": handleGetUsers,
+  "GET /api/v1/admin/audit-log": handleGetAuditLog,
 };
 
 export function resolveMock<T>(path: string, options?: RequestInit): ApiResult<T> {
@@ -1000,6 +1124,12 @@ export function resolveMock<T>(path: string, options?: RequestInit): ApiResult<T
   if (method === "PATCH") {
     const subscriptionMatch = pathname.match(STUDENT_SUBSCRIPTION_PATTERN);
     if (subscriptionMatch) return handleUpdateSubscription(subscriptionMatch[1], options) as ApiResult<T>;
+
+    const userRoleMatch = pathname.match(USER_ROLE_PATTERN);
+    if (userRoleMatch) return handleUpdateUserRole(userRoleMatch[1], options) as ApiResult<T>;
+
+    const userActiveMatch = pathname.match(USER_ACTIVE_PATTERN);
+    if (userActiveMatch) return handleUpdateUserActive(userActiveMatch[1], options) as ApiResult<T>;
   }
 
   const handler = mockHandlers[`${method} ${pathname}`];

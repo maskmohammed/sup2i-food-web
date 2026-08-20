@@ -144,6 +144,32 @@ const navItems: {
     ),
   },
   {
+    label: "Utilisateurs",
+    href: "/administration/users",
+    section: "users",
+    implemented: true,
+    icon: (
+      <NavIcon>
+        <circle cx="9" cy="7" r="3" />
+        <path d="M2 21v-1a7 7 0 0 1 14 0v1" />
+        <circle cx="18" cy="8" r="2.5" />
+        <path d="M16.5 13.5a5 5 0 0 1 5.5 5v1.5" />
+      </NavIcon>
+    ),
+  },
+  {
+    label: "Audit",
+    href: "/administration/audit",
+    section: "audit",
+    implemented: true,
+    icon: (
+      <NavIcon>
+        <path d="M9 3h6l3 3v15H6V6z" />
+        <path d="M9 11h6M9 15h6M9 7h2" />
+      </NavIcon>
+    ),
+  },
+  {
     label: "Direction",
     href: "/direction",
     section: "direction",
