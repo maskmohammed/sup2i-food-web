@@ -18,6 +18,7 @@ import type {
   PaymentMethod,
 } from "../pos-types";
 import type { StockItem, StockMovement, WasteReason } from "../inventory-types";
+import type { FoodPassLookupResult, MealType, MealUsage, Student } from "../canteen-types";
 
 // État en mémoire du module — se réinitialise au reload, pas de vraie
 // persistance tant que le backend n'expose pas /api/v1/orders.
@@ -440,6 +441,129 @@ const STOCK_MOVEMENTS_PATTERN = /^\/api\/v1\/inventory\/items\/([^/]+)\/movement
 const STOCK_WASTE_PATTERN = /^\/api\/v1\/inventory\/items\/([^/]+)\/waste$/;
 const STOCK_RECEIVE_PATTERN = /^\/api\/v1\/inventory\/items\/([^/]+)\/receive$/;
 
+// Jeu de données Food Pass fictif — la vraie gestion des étudiants
+// (photo, abonnement réel, etc.) arrive en W10 Administration.
+const students: Student[] = [
+  { id: "std_1", fullName: "Yassine El Amrani", photoUrl: "", foodPassCode: "FP-1001" },
+  { id: "std_2", fullName: "Salma Bensaid", photoUrl: "", foodPassCode: "FP-1002" },
+  { id: "std_3", fullName: "Omar Idrissi", photoUrl: "", foodPassCode: "FP-1003" },
+  { id: "std_4", fullName: "Nour Chafik", photoUrl: "", foodPassCode: "FP-1004" },
+  { id: "std_5", fullName: "Karim Ziani", photoUrl: "", foodPassCode: "FP-1005" },
+];
+
+// Abonnement inactif pour std_5 volontairement, pour visualiser ce cas en démo.
+const subscriptionStatus: Record<string, boolean> = {
+  std_1: true,
+  std_2: true,
+  std_3: true,
+  std_4: true,
+  std_5: false,
+};
+
+let mealUsages: MealUsage[] = [];
+
+function todayDateString(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function handleFoodPassLookup(code: string): ApiResult<FoodPassLookupResult> {
+  const student = students.find((candidate) => candidate.foodPassCode === code);
+  if (!student) {
+    return {
+      ok: false,
+      error: { code: "INVALID_QR", message: getErrorMessage("INVALID_QR"), status: 404 },
+    };
+  }
+
+  const today = todayDateString();
+  const usedToday = mealUsages.filter((usage) => usage.studentId === student.id && usage.date === today);
+
+  const alreadyUsedToday: Partial<Record<MealType, boolean>> = {};
+  for (const mealType of ["LUNCH", "DINNER"] as MealType[]) {
+    if (usedToday.some((usage) => usage.mealType === mealType)) {
+      alreadyUsedToday[mealType] = true;
+    }
+  }
+
+  return {
+    ok: true,
+    data: {
+      student,
+      subscriptionActive: subscriptionStatus[student.id] ?? false,
+      alreadyUsedToday,
+    },
+  };
+}
+
+type DistributeRequestBody = { studentId?: unknown; mealType?: unknown };
+
+function isMealType(value: unknown): value is MealType {
+  return value === "LUNCH" || value === "DINNER";
+}
+
+/**
+ * Revérifie systématiquement qu'aucun MealUsage n'existe déjà pour cet
+ * étudiant/type/date avant d'en créer un — même logique de
+ * vérification-avant-écriture qu'attendrait le vrai backend pour garantir
+ * qu'un seul scan simultané réussit. En JS mono-thread ce n'est pas un
+ * vrai test de concurrence (pas de requêtes réellement parallèles ici),
+ * mais le principe de vérification est identique.
+ */
+function handleDistributeMeal(options?: RequestInit): ApiResult<MealUsage> {
+  const body = parseJsonBody<DistributeRequestBody>(options);
+  const studentId = typeof body?.studentId === "string" ? body.studentId : null;
+  const mealType = isMealType(body?.mealType) ? body.mealType : null;
+
+  if (!studentId || !mealType) {
+    return {
+      ok: false,
+      error: { code: "VALIDATION_ERROR", message: getErrorMessage("VALIDATION_ERROR"), status: 422 },
+    };
+  }
+
+  const student = students.find((candidate) => candidate.id === studentId);
+  if (!student) {
+    return {
+      ok: false,
+      error: { code: "INVALID_QR", message: getErrorMessage("INVALID_QR"), status: 404 },
+    };
+  }
+
+  // Défense en profondeur : ne jamais faire confiance qu'à l'UI, même si
+  // le bouton est censé être désactivé côté client pour un abonnement
+  // inactif.
+  if (!(subscriptionStatus[student.id] ?? false)) {
+    return {
+      ok: false,
+      error: { code: "SUBSCRIPTION_INACTIVE", message: getErrorMessage("SUBSCRIPTION_INACTIVE"), status: 403 },
+    };
+  }
+
+  const today = todayDateString();
+  const alreadyUsed = mealUsages.some(
+    (usage) => usage.studentId === studentId && usage.mealType === mealType && usage.date === today,
+  );
+
+  if (alreadyUsed) {
+    return {
+      ok: false,
+      error: { code: "MEAL_ALREADY_USED", message: getErrorMessage("MEAL_ALREADY_USED"), status: 409 },
+    };
+  }
+
+  const usage: MealUsage = {
+    id: `meal_${Math.random().toString(36).slice(2, 10)}`,
+    studentId,
+    mealType,
+    date: today,
+    distributedAt: new Date().toISOString(),
+    distributedBy: "Staff (mode dev)",
+  };
+  mealUsages = [usage, ...mealUsages];
+
+  return { ok: true, data: usage };
+}
+
 function handleGetOrder(id: string): ApiResult<Order> {
   const order = orders.find((candidate) => candidate.id === id);
   if (!order) {
@@ -714,33 +838,41 @@ const mockHandlers: Record<string, MockHandler> = {
 
   "GET /api/v1/inventory/items": () => ({ ok: true, data: stockItems }),
   "GET /api/v1/inventory/alerts": handleGetStockAlerts,
+
+  "POST /api/v1/canteen/distribute": handleDistributeMeal,
 };
 
 export function resolveMock<T>(path: string, options?: RequestInit): ApiResult<T> {
   const method = (options?.method ?? "GET").toUpperCase();
+  const [pathname, queryString] = path.split("?");
 
   if (method === "GET") {
-    const orderMatch = path.match(ORDER_DETAIL_PATTERN);
+    const orderMatch = pathname.match(ORDER_DETAIL_PATTERN);
     if (orderMatch) return handleGetOrder(orderMatch[1]) as ApiResult<T>;
 
-    const movementsMatch = path.match(STOCK_MOVEMENTS_PATTERN);
+    const movementsMatch = pathname.match(STOCK_MOVEMENTS_PATTERN);
     if (movementsMatch) return handleGetStockMovements(movementsMatch[1]) as ApiResult<T>;
+
+    if (pathname === "/api/v1/canteen/lookup") {
+      const code = new URLSearchParams(queryString ?? "").get("code") ?? "";
+      return handleFoodPassLookup(code) as ApiResult<T>;
+    }
   }
   if (method === "POST") {
-    const transitionMatch = path.match(ORDER_TRANSITION_PATTERN);
+    const transitionMatch = pathname.match(ORDER_TRANSITION_PATTERN);
     if (transitionMatch) return handleOrderTransition(transitionMatch[1], options) as ApiResult<T>;
 
-    const adjustMatch = path.match(STOCK_ADJUST_PATTERN);
+    const adjustMatch = pathname.match(STOCK_ADJUST_PATTERN);
     if (adjustMatch) return handleAdjustStock(adjustMatch[1], options) as ApiResult<T>;
 
-    const wasteMatch = path.match(STOCK_WASTE_PATTERN);
+    const wasteMatch = pathname.match(STOCK_WASTE_PATTERN);
     if (wasteMatch) return handleWasteStock(wasteMatch[1], options) as ApiResult<T>;
 
-    const receiveMatch = path.match(STOCK_RECEIVE_PATTERN);
+    const receiveMatch = pathname.match(STOCK_RECEIVE_PATTERN);
     if (receiveMatch) return handleReceiveStock(receiveMatch[1], options) as ApiResult<T>;
   }
 
-  const handler = mockHandlers[`${method} ${path}`];
+  const handler = mockHandlers[`${method} ${pathname}`];
 
   if (!handler) {
     return {

@@ -99,6 +99,7 @@ const navItems: {
     label: "Cantine",
     href: "/cantine",
     section: "cantine",
+    implemented: true,
     icon: (
       <NavIcon>
         <path d="M6 3v7a2 2 0 0 0 4 0V3" />
