@@ -170,6 +170,18 @@ const navItems: {
     ),
   },
   {
+    label: "Promotions",
+    href: "/administration/promotions",
+    section: "promotions",
+    implemented: true,
+    icon: (
+      <NavIcon>
+        <path d="M12 2 2 12l10 10 10-10z" />
+        <circle cx="9.5" cy="9.5" r="1.5" />
+      </NavIcon>
+    ),
+  },
+  {
     label: "Direction",
     href: "/direction",
     section: "direction",

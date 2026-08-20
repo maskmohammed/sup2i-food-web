@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { apiFetch } from "@/lib/api/client";
 import { useApiQuery } from "@/lib/api/use-api";
 import { LoadingState } from "@/components/states/loading-state";
@@ -9,6 +9,7 @@ import { ErrorState } from "@/components/states/error-state";
 import { CloseSessionPanel } from "./close-session-panel";
 import { getErrorMessage } from "@/lib/error-messages";
 import { MockPrinterAdapter, type PrintableTicket } from "@/lib/hardware/printer";
+import { useKeyboardWedgeScanner } from "@/lib/hardware/scanner";
 import type { ApiError } from "@/lib/api/types";
 import type { Product } from "@/lib/api/catalogue-types";
 import type {
@@ -414,6 +415,36 @@ function PosWorkspace({
     setPaymentMethod(null);
     setCheckoutError(null);
   }
+
+  // Referme le TODO ouvert depuis W7 : le scanner keyboard-wedge était prêt
+  // mais jamais branché, faute de champ barcode sur Product (ajouté en
+  // W11). Un scan qui matche un produit disponible l'ajoute au panier,
+  // exactement comme un clic sur la grille.
+  //
+  // `productsRef`/`addToCartRef` + `handleScan` stable (useCallback, deps
+  // vides) : le hook ne se réabonne qu'une fois au montage. Si on lui
+  // passait une fonction recréée à chaque render (ex. panier qui change),
+  // le listener clavier serait désabonné/réabonné en plein milieu d'une
+  // rafale de frappes rapides, ce qui viderait le buffer interne du
+  // scanner et perdrait le scan en cours (voir src/lib/hardware/scanner.ts).
+  const productsRef = useRef(products);
+  useEffect(() => {
+    productsRef.current = products;
+  }, [products]);
+
+  const addToCartRef = useRef(addToCart);
+  useEffect(() => {
+    addToCartRef.current = addToCart;
+  });
+
+  const handleScan = useCallback((code: string) => {
+    const product = productsRef.current?.find((candidate) => candidate.barcode === code);
+    if (product && product.available) {
+      addToCartRef.current(product.id);
+    }
+  }, []);
+
+  useKeyboardWedgeScanner(handleScan);
 
   useEffect(() => {
     if (cart.length === 0) return;

@@ -6,7 +6,7 @@
 import { getErrorMessage } from "@/lib/error-messages";
 import { ROLES, type Role } from "@/lib/roles";
 import type { ApiResult } from "../types";
-import type { CreateProductInput, Product } from "../catalogue-types";
+import type { CreateProductInput, Product, ProductOption, Promotion } from "../catalogue-types";
 import { ORDER_TRANSITIONS, type Order, type OrderStatus } from "../orders-types";
 import type {
   CartItem,
@@ -177,18 +177,50 @@ function recordAudit(action: string, details: string, actor: AuditActor = UNKNOW
 // État en mémoire du module — se réinitialise au reload, pas de vraie
 // persistance tant que le backend n'expose pas /api/v1/products.
 let products: Product[] = [
-  { id: "prod_1", name: "Coca", priceCents: 700, category: "Boissons", available: true },
-  { id: "prod_2", name: "Sandwich Thon", priceCents: 1500, category: "Snacks", available: true },
-  { id: "prod_3", name: "Tajine Poulet", priceCents: 3500, category: "Plats", available: true },
+  {
+    id: "prod_1",
+    name: "Coca",
+    priceCents: 700,
+    category: "Boissons",
+    available: true,
+    barcode: "6111000000017",
+  },
+  {
+    id: "prod_2",
+    name: "Sandwich Thon",
+    priceCents: 1500,
+    category: "Snacks",
+    available: true,
+    barcode: "6111000000024",
+    options: [
+      { id: "opt_1", name: "Sans sauce", priceDeltaCents: 0 },
+      { id: "opt_2", name: "Pain complet", priceDeltaCents: 100 },
+    ],
+  },
+  {
+    id: "prod_3",
+    name: "Tajine Poulet",
+    priceCents: 3500,
+    category: "Plats",
+    available: true,
+    barcode: "6111000000031",
+    options: [{ id: "opt_3", name: "Portion double", priceDeltaCents: 1500 }],
+  },
 ];
 
-type CreateProductRequestBody = { name?: unknown; priceCents?: unknown; category?: unknown };
+type CreateProductRequestBody = {
+  name?: unknown;
+  priceCents?: unknown;
+  category?: unknown;
+  barcode?: unknown;
+};
 
 function handleCreateProduct(options?: RequestInit): ApiResult<Product> {
   const body = parseJsonBody<CreateProductRequestBody>(options);
   const name = typeof body?.name === "string" ? body.name.trim() : "";
   const priceCents = typeof body?.priceCents === "number" ? body.priceCents : NaN;
   const category = typeof body?.category === "string" ? body.category.trim() : "";
+  const barcode = typeof body?.barcode === "string" ? body.barcode.trim() : "";
 
   if (!name || !Number.isFinite(priceCents) || priceCents <= 0 || !category) {
     return {
@@ -197,7 +229,15 @@ function handleCreateProduct(options?: RequestInit): ApiResult<Product> {
     };
   }
 
-  const input: CreateProductInput = { name, priceCents, category };
+  const barcodeTaken = barcode ? products.some((candidate) => candidate.barcode === barcode) : false;
+  if (barcodeTaken) {
+    return {
+      ok: false,
+      error: { code: "VALIDATION_ERROR", message: getErrorMessage("VALIDATION_ERROR"), status: 422 },
+    };
+  }
+
+  const input: CreateProductInput = { name, priceCents, category, barcode: barcode || undefined };
   const product: Product = {
     id: `prod_${Math.random().toString(36).slice(2, 10)}`,
     ...input,
@@ -209,6 +249,176 @@ function handleCreateProduct(options?: RequestInit): ApiResult<Product> {
   recordAudit("PRODUCT_CREATED", `${product.name} créé à ${(product.priceCents / 100).toFixed(2)} DH`);
 
   return { ok: true, data: product };
+}
+
+type UpdateAvailabilityRequestBody = { available?: unknown };
+
+function handleUpdateProductAvailability(productId: string, options?: RequestInit): ApiResult<Product> {
+  const product = products.find((candidate) => candidate.id === productId);
+  if (!product) {
+    return {
+      ok: false,
+      error: { code: "INTERNAL_ERROR", message: getErrorMessage("INTERNAL_ERROR"), status: 404 },
+    };
+  }
+
+  const body = parseJsonBody<UpdateAvailabilityRequestBody>(options);
+  if (typeof body?.available !== "boolean") {
+    return {
+      ok: false,
+      error: { code: "VALIDATION_ERROR", message: getErrorMessage("VALIDATION_ERROR"), status: 422 },
+    };
+  }
+
+  product.available = body.available;
+
+  return { ok: true, data: product };
+}
+
+type UpdateProductRequestBody = { barcode?: unknown; options?: unknown };
+
+function isProductOptionArray(value: unknown): value is ProductOption[] {
+  if (!Array.isArray(value)) return false;
+  return value.every((item) => {
+    if (typeof item !== "object" || item === null) return false;
+    const candidate = item as { id?: unknown; name?: unknown; priceDeltaCents?: unknown };
+    return (
+      typeof candidate.id === "string" &&
+      typeof candidate.name === "string" &&
+      typeof candidate.priceDeltaCents === "number"
+    );
+  });
+}
+
+/** Édition partielle — barcode et/ou options, chaque champ est optionnel. */
+function handleUpdateProduct(productId: string, options?: RequestInit): ApiResult<Product> {
+  const product = products.find((candidate) => candidate.id === productId);
+  if (!product) {
+    return {
+      ok: false,
+      error: { code: "INTERNAL_ERROR", message: getErrorMessage("INTERNAL_ERROR"), status: 404 },
+    };
+  }
+
+  const body = parseJsonBody<UpdateProductRequestBody>(options);
+
+  if (typeof body?.barcode === "string") {
+    const trimmed = body.barcode.trim();
+    const barcodeTaken = trimmed
+      ? products.some((candidate) => candidate.id !== productId && candidate.barcode === trimmed)
+      : false;
+
+    if (barcodeTaken) {
+      return {
+        ok: false,
+        error: { code: "VALIDATION_ERROR", message: getErrorMessage("VALIDATION_ERROR"), status: 422 },
+      };
+    }
+
+    product.barcode = trimmed || undefined;
+  }
+
+  if (body?.options !== undefined) {
+    if (!isProductOptionArray(body.options)) {
+      return {
+        ok: false,
+        error: { code: "VALIDATION_ERROR", message: getErrorMessage("VALIDATION_ERROR"), status: 422 },
+      };
+    }
+    product.options = body.options;
+  }
+
+  return { ok: true, data: product };
+}
+
+// État promotions en mémoire — appliquées automatiquement au calcul du
+// total dans priceCartItems ci-dessous, jamais côté client.
+let promotions: Promotion[] = [
+  {
+    id: "promo_1",
+    label: "-10% sur les boissons",
+    discountPercent: 10,
+    active: true,
+    appliesToProductIds: ["prod_1"],
+  },
+];
+
+function activeDiscountPercentFor(productId: string): number {
+  const applicable = promotions.filter(
+    (promotion) => promotion.active && promotion.appliesToProductIds.includes(productId),
+  );
+  if (applicable.length === 0) return 0;
+  return Math.max(...applicable.map((promotion) => promotion.discountPercent));
+}
+
+function handleGetPromotions(): ApiResult<Promotion[]> {
+  return { ok: true, data: promotions };
+}
+
+type CreatePromotionRequestBody = {
+  label?: unknown;
+  discountPercent?: unknown;
+  appliesToProductIds?: unknown;
+};
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === "string");
+}
+
+function handleCreatePromotion(options?: RequestInit): ApiResult<Promotion> {
+  const body = parseJsonBody<CreatePromotionRequestBody>(options);
+  const label = typeof body?.label === "string" ? body.label.trim() : "";
+  const discountPercent = typeof body?.discountPercent === "number" ? body.discountPercent : NaN;
+  const appliesToProductIds = isStringArray(body?.appliesToProductIds) ? body.appliesToProductIds : [];
+
+  if (
+    !label ||
+    !Number.isFinite(discountPercent) ||
+    discountPercent <= 0 ||
+    discountPercent > 100 ||
+    appliesToProductIds.length === 0
+  ) {
+    return {
+      ok: false,
+      error: { code: "VALIDATION_ERROR", message: getErrorMessage("VALIDATION_ERROR"), status: 422 },
+    };
+  }
+
+  const promotion: Promotion = {
+    id: `promo_${Math.random().toString(36).slice(2, 10)}`,
+    label,
+    discountPercent,
+    active: true,
+    appliesToProductIds,
+  };
+
+  promotions = [...promotions, promotion];
+
+  return { ok: true, data: promotion };
+}
+
+type UpdatePromotionActiveRequestBody = { active?: unknown };
+
+function handleUpdatePromotionActive(promotionId: string, options?: RequestInit): ApiResult<Promotion> {
+  const promotion = promotions.find((candidate) => candidate.id === promotionId);
+  if (!promotion) {
+    return {
+      ok: false,
+      error: { code: "INTERNAL_ERROR", message: getErrorMessage("INTERNAL_ERROR"), status: 404 },
+    };
+  }
+
+  const body = parseJsonBody<UpdatePromotionActiveRequestBody>(options);
+  if (typeof body?.active !== "boolean") {
+    return {
+      ok: false,
+      error: { code: "VALIDATION_ERROR", message: getErrorMessage("VALIDATION_ERROR"), status: 422 },
+    };
+  }
+
+  promotion.active = body.active;
+
+  return { ok: true, data: promotion };
 }
 
 type CartPriceRequestItem = { productId?: unknown; quantity?: unknown };
@@ -246,12 +456,15 @@ function priceCartItems(rawItems: unknown): ApiResult<CartPriceResult> {
       };
     }
 
-    const subtotalCents = product.priceCents * quantity;
+    const discountPercent = activeDiscountPercentFor(product.id);
+    const unitPriceCents =
+      discountPercent > 0 ? Math.round(product.priceCents * (1 - discountPercent / 100)) : product.priceCents;
+    const subtotalCents = unitPriceCents * quantity;
     items.push({
       productId: product.id,
       productName: product.name,
       quantity,
-      unitPriceCents: product.priceCents,
+      unitPriceCents,
       subtotalCents,
     });
     totalCents += subtotalCents;
@@ -1045,6 +1258,10 @@ const USER_ACTIVE_PATTERN = /^\/api\/v1\/admin\/users\/([^/]+)\/active$/;
 const ORDER_DETAIL_PATTERN = /^\/api\/v1\/orders\/([^/]+)$/;
 const ORDER_TRANSITION_PATTERN = /^\/api\/v1\/orders\/([^/]+)\/transition$/;
 
+const PRODUCT_AVAILABILITY_PATTERN = /^\/api\/v1\/products\/([^/]+)\/availability$/;
+const PRODUCT_DETAIL_PATTERN = /^\/api\/v1\/products\/([^/]+)$/;
+const PROMOTION_ACTIVE_PATTERN = /^\/api\/v1\/promotions\/([^/]+)\/active$/;
+
 type MockHandler = (options?: RequestInit) => ApiResult<unknown>;
 
 /** Clé = "MÉTHODE chemin". Pas de vraie route Next — juste un registre en mémoire. */
@@ -1087,6 +1304,9 @@ const mockHandlers: Record<string, MockHandler> = {
 
   "GET /api/v1/admin/users": handleGetUsers,
   "GET /api/v1/admin/audit-log": handleGetAuditLog,
+
+  "GET /api/v1/promotions": handleGetPromotions,
+  "POST /api/v1/promotions": handleCreatePromotion,
 };
 
 export function resolveMock<T>(path: string, options?: RequestInit): ApiResult<T> {
@@ -1130,6 +1350,15 @@ export function resolveMock<T>(path: string, options?: RequestInit): ApiResult<T
 
     const userActiveMatch = pathname.match(USER_ACTIVE_PATTERN);
     if (userActiveMatch) return handleUpdateUserActive(userActiveMatch[1], options) as ApiResult<T>;
+
+    const availabilityMatch = pathname.match(PRODUCT_AVAILABILITY_PATTERN);
+    if (availabilityMatch) return handleUpdateProductAvailability(availabilityMatch[1], options) as ApiResult<T>;
+
+    const productDetailMatch = pathname.match(PRODUCT_DETAIL_PATTERN);
+    if (productDetailMatch) return handleUpdateProduct(productDetailMatch[1], options) as ApiResult<T>;
+
+    const promotionActiveMatch = pathname.match(PROMOTION_ACTIVE_PATTERN);
+    if (promotionActiveMatch) return handleUpdatePromotionActive(promotionActiveMatch[1], options) as ApiResult<T>;
   }
 
   const handler = mockHandlers[`${method} ${pathname}`];
