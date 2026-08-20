@@ -6,6 +6,8 @@ import { useApiQuery } from "@/lib/api/use-api";
 import { LoadingState } from "@/components/states/loading-state";
 import { EmptyState } from "@/components/states/empty-state";
 import { ErrorState } from "@/components/states/error-state";
+import { RequireRole } from "@/components/require-role";
+import { NAV_SECTION_ROLES } from "@/lib/roles";
 import type { ApiError } from "@/lib/api/types";
 import type { Product } from "@/lib/api/catalogue-types";
 
@@ -60,8 +62,9 @@ export default function CataloguePage() {
   }
 
   return (
-    <div>
-      <h1 className="text-lg font-semibold text-text">Catalogue</h1>
+    <RequireRole allowedRoles={NAV_SECTION_ROLES.catalogue}>
+      <div>
+        <h1 className="text-lg font-semibold text-text">Catalogue</h1>
       <p className="mt-1 text-sm text-text-muted">
         Produits disponibles à la vente — données mockées, pas encore persistées côté backend.
       </p>
@@ -169,6 +172,7 @@ export default function CataloguePage() {
           )
         ) : null}
       </div>
-    </div>
+      </div>
+    </RequireRole>
   );
 }

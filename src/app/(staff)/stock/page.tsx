@@ -6,6 +6,8 @@ import { useApiQuery } from "@/lib/api/use-api";
 import { LoadingState } from "@/components/states/loading-state";
 import { EmptyState } from "@/components/states/empty-state";
 import { ErrorState } from "@/components/states/error-state";
+import { RequireRole } from "@/components/require-role";
+import { NAV_SECTION_ROLES } from "@/lib/roles";
 import type { ApiError } from "@/lib/api/types";
 import type { StockItem, StockMovement, StockMovementType, WasteReason } from "@/lib/api/inventory-types";
 import { WASTE_REASON_LABELS } from "@/lib/api/inventory-types";
@@ -381,8 +383,9 @@ export default function StockPage() {
   const alertItems = data?.filter((item) => item.quantityOnHand <= item.lowStockThreshold) ?? [];
 
   return (
-    <div>
-      <h1 className="text-lg font-semibold text-text">Stock</h1>
+    <RequireRole allowedRoles={NAV_SECTION_ROLES.stock}>
+      <div>
+        <h1 className="text-lg font-semibold text-text">Stock</h1>
       <p className="mt-1 text-sm text-text-muted">
         Cliquez sur un article pour voir son historique de mouvements.
       </p>
@@ -520,6 +523,7 @@ export default function StockPage() {
           )
         ) : null}
       </div>
-    </div>
+      </div>
+    </RequireRole>
   );
 }
