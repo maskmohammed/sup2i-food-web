@@ -1,9 +1,8 @@
-export type Student = {
-  id: string;
-  fullName: string;
-  photoUrl: string;
-  foodPassCode: string;
-};
+// Student est géré côté Administration — voir students-types.ts (source
+// de vérité unique, réexportée ici pour ne pas casser les imports
+// existants depuis canteen-types).
+export type { Student } from "./students-types";
+import type { Student } from "./students-types";
 
 export type MealType = "LUNCH" | "DINNER";
 

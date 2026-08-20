@@ -18,7 +18,8 @@ import type {
   PaymentMethod,
 } from "../pos-types";
 import type { StockItem, StockMovement, WasteReason } from "../inventory-types";
-import type { FoodPassLookupResult, MealType, MealUsage, Student } from "../canteen-types";
+import type { FoodPassLookupResult, MealType, MealUsage } from "../canteen-types";
+import type { CreateStudentInput, Student } from "../students-types";
 
 // État en mémoire du module — se réinitialise au reload, pas de vraie
 // persistance tant que le backend n'expose pas /api/v1/orders.
@@ -441,24 +442,143 @@ const STOCK_MOVEMENTS_PATTERN = /^\/api\/v1\/inventory\/items\/([^/]+)\/movement
 const STOCK_WASTE_PATTERN = /^\/api\/v1\/inventory\/items\/([^/]+)\/waste$/;
 const STOCK_RECEIVE_PATTERN = /^\/api\/v1\/inventory\/items\/([^/]+)\/receive$/;
 
-// Jeu de données Food Pass fictif — la vraie gestion des étudiants
-// (photo, abonnement réel, etc.) arrive en W10 Administration.
-const students: Student[] = [
-  { id: "std_1", fullName: "Yassine El Amrani", photoUrl: "", foodPassCode: "FP-1001" },
-  { id: "std_2", fullName: "Salma Bensaid", photoUrl: "", foodPassCode: "FP-1002" },
-  { id: "std_3", fullName: "Omar Idrissi", photoUrl: "", foodPassCode: "FP-1003" },
-  { id: "std_4", fullName: "Nour Chafik", photoUrl: "", foodPassCode: "FP-1004" },
-  { id: "std_5", fullName: "Karim Ziani", photoUrl: "", foodPassCode: "FP-1005" },
+// État étudiants centralisé — source unique pour Administration (W10) ET
+// Cantine (W9). Abonnement inactif pour std_5 volontairement, pour
+// visualiser ce cas en démo.
+let students: Student[] = [
+  {
+    id: "std_1",
+    fullName: "Yassine El Amrani",
+    photoUrl: "",
+    foodPassCode: "FP-1001",
+    subscriptionActive: true,
+    createdAt: "2026-08-01T08:00:00.000Z",
+  },
+  {
+    id: "std_2",
+    fullName: "Salma Bensaid",
+    photoUrl: "",
+    foodPassCode: "FP-1002",
+    subscriptionActive: true,
+    createdAt: "2026-08-01T08:00:00.000Z",
+  },
+  {
+    id: "std_3",
+    fullName: "Omar Idrissi",
+    photoUrl: "",
+    foodPassCode: "FP-1003",
+    subscriptionActive: true,
+    createdAt: "2026-08-01T08:00:00.000Z",
+  },
+  {
+    id: "std_4",
+    fullName: "Nour Chafik",
+    photoUrl: "",
+    foodPassCode: "FP-1004",
+    subscriptionActive: true,
+    createdAt: "2026-08-01T08:00:00.000Z",
+  },
+  {
+    id: "std_5",
+    fullName: "Karim Ziani",
+    photoUrl: "",
+    foodPassCode: "FP-1005",
+    subscriptionActive: false,
+    createdAt: "2026-08-01T08:00:00.000Z",
+  },
 ];
 
-// Abonnement inactif pour std_5 volontairement, pour visualiser ce cas en démo.
-const subscriptionStatus: Record<string, boolean> = {
-  std_1: true,
-  std_2: true,
-  std_3: true,
-  std_4: true,
-  std_5: false,
-};
+type CreateStudentRequestBody = { fullName?: unknown; foodPassCode?: unknown };
+
+function handleGetStudents(): ApiResult<Student[]> {
+  return { ok: true, data: students };
+}
+
+function handleCreateStudent(options?: RequestInit): ApiResult<Student> {
+  const body = parseJsonBody<CreateStudentRequestBody>(options);
+  const fullName = typeof body?.fullName === "string" ? body.fullName.trim() : "";
+  const foodPassCode = typeof body?.foodPassCode === "string" ? body.foodPassCode.trim() : "";
+
+  const codeAlreadyUsed = students.some((candidate) => candidate.foodPassCode === foodPassCode);
+
+  if (!fullName || !foodPassCode || codeAlreadyUsed) {
+    return {
+      ok: false,
+      error: { code: "VALIDATION_ERROR", message: getErrorMessage("VALIDATION_ERROR"), status: 422 },
+    };
+  }
+
+  const input: CreateStudentInput = { fullName, foodPassCode };
+  const student: Student = {
+    id: `std_${Math.random().toString(36).slice(2, 10)}`,
+    ...input,
+    photoUrl: "",
+    subscriptionActive: true,
+    createdAt: new Date().toISOString(),
+  };
+
+  students = [...students, student];
+
+  return { ok: true, data: student };
+}
+
+type UpdateSubscriptionRequestBody = { active?: unknown };
+
+function handleUpdateSubscription(studentId: string, options?: RequestInit): ApiResult<Student> {
+  const student = students.find((candidate) => candidate.id === studentId);
+  if (!student) {
+    return {
+      ok: false,
+      error: { code: "INTERNAL_ERROR", message: getErrorMessage("INTERNAL_ERROR"), status: 404 },
+    };
+  }
+
+  const body = parseJsonBody<UpdateSubscriptionRequestBody>(options);
+  if (typeof body?.active !== "boolean") {
+    return {
+      ok: false,
+      error: { code: "VALIDATION_ERROR", message: getErrorMessage("VALIDATION_ERROR"), status: 422 },
+    };
+  }
+
+  student.subscriptionActive = body.active;
+
+  return { ok: true, data: student };
+}
+
+type UpdatePhotoRequestBody = { photoUrl?: unknown };
+
+/**
+ * Simulation d'upload — pas de vrai fichier binaire à ce stade, juste une
+ * URL/chaîne texte. La vraie gestion d'upload de fichier viendra avec
+ * l'intégration backend réelle.
+ */
+function handleUpdatePhoto(studentId: string, options?: RequestInit): ApiResult<Student> {
+  const student = students.find((candidate) => candidate.id === studentId);
+  if (!student) {
+    return {
+      ok: false,
+      error: { code: "INTERNAL_ERROR", message: getErrorMessage("INTERNAL_ERROR"), status: 404 },
+    };
+  }
+
+  const body = parseJsonBody<UpdatePhotoRequestBody>(options);
+  const photoUrl = typeof body?.photoUrl === "string" ? body.photoUrl.trim() : null;
+
+  if (photoUrl === null) {
+    return {
+      ok: false,
+      error: { code: "VALIDATION_ERROR", message: getErrorMessage("VALIDATION_ERROR"), status: 422 },
+    };
+  }
+
+  student.photoUrl = photoUrl;
+
+  return { ok: true, data: student };
+}
+
+const STUDENT_SUBSCRIPTION_PATTERN = /^\/api\/v1\/admin\/students\/([^/]+)\/subscription$/;
+const STUDENT_PHOTO_PATTERN = /^\/api\/v1\/admin\/students\/([^/]+)\/photo$/;
 
 let mealUsages: MealUsage[] = [];
 
@@ -489,7 +609,7 @@ function handleFoodPassLookup(code: string): ApiResult<FoodPassLookupResult> {
     ok: true,
     data: {
       student,
-      subscriptionActive: subscriptionStatus[student.id] ?? false,
+      subscriptionActive: student.subscriptionActive,
       alreadyUsedToday,
     },
   };
@@ -532,7 +652,7 @@ function handleDistributeMeal(options?: RequestInit): ApiResult<MealUsage> {
   // Défense en profondeur : ne jamais faire confiance qu'à l'UI, même si
   // le bouton est censé être désactivé côté client pour un abonnement
   // inactif.
-  if (!(subscriptionStatus[student.id] ?? false)) {
+  if (!student.subscriptionActive) {
     return {
       ok: false,
       error: { code: "SUBSCRIPTION_INACTIVE", message: getErrorMessage("SUBSCRIPTION_INACTIVE"), status: 403 },
@@ -840,6 +960,9 @@ const mockHandlers: Record<string, MockHandler> = {
   "GET /api/v1/inventory/alerts": handleGetStockAlerts,
 
   "POST /api/v1/canteen/distribute": handleDistributeMeal,
+
+  "GET /api/v1/admin/students": handleGetStudents,
+  "POST /api/v1/admin/students": handleCreateStudent,
 };
 
 export function resolveMock<T>(path: string, options?: RequestInit): ApiResult<T> {
@@ -870,6 +993,13 @@ export function resolveMock<T>(path: string, options?: RequestInit): ApiResult<T
 
     const receiveMatch = pathname.match(STOCK_RECEIVE_PATTERN);
     if (receiveMatch) return handleReceiveStock(receiveMatch[1], options) as ApiResult<T>;
+
+    const photoMatch = pathname.match(STUDENT_PHOTO_PATTERN);
+    if (photoMatch) return handleUpdatePhoto(photoMatch[1], options) as ApiResult<T>;
+  }
+  if (method === "PATCH") {
+    const subscriptionMatch = pathname.match(STUDENT_SUBSCRIPTION_PATTERN);
+    if (subscriptionMatch) return handleUpdateSubscription(subscriptionMatch[1], options) as ApiResult<T>;
   }
 
   const handler = mockHandlers[`${method} ${pathname}`];
