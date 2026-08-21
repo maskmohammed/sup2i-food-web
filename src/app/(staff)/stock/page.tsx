@@ -395,9 +395,14 @@ export default function StockPage() {
           <p className="text-sm font-semibold text-status-alert">Alertes stock bas ({alertItems.length})</p>
           <ul className="mt-2 flex flex-col gap-1">
             {alertItems.map((item) => (
-              <li key={item.id} className="flex items-center gap-3 text-sm text-text">
-                <span className="min-w-0 flex-1 truncate">{item.productName}</span>
-                <span className="flex-none whitespace-nowrap font-mono text-text-muted">
+              <li
+                key={item.id}
+                className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 text-sm text-text"
+              >
+                <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">
+                  {item.productName}
+                </span>
+                <span className="whitespace-nowrap font-mono text-text-muted">
                   {item.quantityOnHand} / {item.lowStockThreshold} {item.unit}
                 </span>
               </li>
@@ -432,53 +437,60 @@ export default function StockPage() {
 
                 return (
                   <li key={item.id} className="rounded-lg border border-border bg-surface-raised p-4">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <button
-                        type="button"
-                        onClick={() => toggle(item.id, "history")}
-                        className="flex min-w-0 flex-1 items-center gap-3 text-left"
-                      >
-                        <span
-                          aria-hidden
-                          className={`h-2.5 w-2.5 flex-none rounded-full ${
-                            lowStock ? "bg-status-alert" : "bg-status-ready"
-                          }`}
-                        />
-                        <span className="min-w-0 flex-1 truncate text-sm font-medium text-text">
-                          {item.productName}
-                        </span>
+                    <div className="flex flex-col gap-2">
+                      <div className="flex items-center justify-between gap-3">
+                        <button
+                          type="button"
+                          onClick={() => toggle(item.id, "history")}
+                          className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                        >
+                          <span
+                            aria-hidden
+                            className={`h-2.5 w-2.5 flex-none rounded-full ${
+                              lowStock ? "bg-status-alert" : "bg-status-ready"
+                            }`}
+                          />
+                          <span className="min-w-0 flex-1 truncate text-sm font-medium text-text">
+                            {item.productName}
+                          </span>
+                        </button>
                         <span className="flex-none whitespace-nowrap font-mono text-sm text-text-muted">
                           {item.quantityOnHand} {item.unit}
                         </span>
+                      </div>
+
+                      <div className="flex flex-wrap items-center justify-between gap-2">
                         {lowStock ? (
                           <span className="flex-none whitespace-nowrap rounded-full border border-status-alert px-2 py-0.5 text-xs text-status-alert">
                             Stock bas
                           </span>
-                        ) : null}
-                      </button>
+                        ) : (
+                          <span />
+                        )}
 
-                      <div className="flex flex-none gap-2">
-                        <button
-                          type="button"
-                          onClick={() => toggle(item.id, "adjust")}
-                          className="rounded-md border border-border bg-surface px-3 py-1.5 text-sm text-text transition-colors hover:bg-surface-raised"
-                        >
-                          Ajuster
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => toggle(item.id, "receive")}
-                          className="rounded-md border border-border bg-surface px-3 py-1.5 text-sm text-text transition-colors hover:bg-surface-raised"
-                        >
-                          Réception
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => toggle(item.id, "waste")}
-                          className="rounded-md border border-border bg-surface px-3 py-1.5 text-sm text-text transition-colors hover:bg-surface-raised"
-                        >
-                          Gaspillage
-                        </button>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => toggle(item.id, "adjust")}
+                            className="rounded-md border border-border bg-surface px-3 py-1.5 text-sm text-text transition-colors hover:bg-surface-raised"
+                          >
+                            Ajuster
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => toggle(item.id, "receive")}
+                            className="rounded-md border border-border bg-surface px-3 py-1.5 text-sm text-text transition-colors hover:bg-surface-raised"
+                          >
+                            Réception
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => toggle(item.id, "waste")}
+                            className="rounded-md border border-border bg-surface px-3 py-1.5 text-sm text-text transition-colors hover:bg-surface-raised"
+                          >
+                            Gaspillage
+                          </button>
+                        </div>
                       </div>
                     </div>
 

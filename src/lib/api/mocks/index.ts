@@ -22,6 +22,7 @@ import { MEAL_TYPE_LABELS } from "../canteen-types";
 import type { FoodPassLookupResult, MealType, MealUsage } from "../canteen-types";
 import type { CreateStudentInput, Student } from "../students-types";
 import type { AuditLogEntry, StaffUser } from "../admin-types";
+import type { DirectionKpi } from "../direction-types";
 
 // État en mémoire du module — se réinitialise au reload, pas de vraie
 // persistance tant que le backend n'expose pas /api/v1/orders.
@@ -1255,6 +1256,64 @@ function handleGetAuditLog(): ApiResult<AuditLogEntry[]> {
 const USER_ROLE_PATTERN = /^\/api\/v1\/admin\/users\/([^/]+)\/role$/;
 const USER_ACTIVE_PATTERN = /^\/api\/v1\/admin\/users\/([^/]+)\/active$/;
 
+// Commandes comptées comme "chiffre d'affaires" — tout statut à partir de
+// PAID (payé), jusqu'aux statuts terminaux positifs. Exclut
+// DRAFT/CREATED/AWAITING_PAYMENT (pas encore payées) et
+// CANCELLED/EXPIRED/REFUNDED/NO_SHOW (pas comptées comme vente).
+const REVENUE_STATUSES: OrderStatus[] = ["PAID", "QUEUED", "PREPARING", "READY", "COLLECTED", "COMPLETED"];
+
+/**
+ * Agrégation pure des données déjà en mémoire (commandes, stock, cantine)
+ * — aucune nouvelle donnée métier inventée ici. "Récent" pour le
+ * gaspillage = tout ce qui est actuellement en mémoire (les mocks n'ont
+ * pas d'historique au-delà du reload, donc pas de fenêtre de date
+ * arbitraire à inventer). ordersByPaymentMethod reste `null` : voir le
+ * commentaire sur DirectionKpi (mode de paiement non persisté sur Order).
+ */
+function handleGetDirectionKpi(): ApiResult<DirectionKpi> {
+  const revenueOrders = orders.filter((order) => REVENUE_STATUSES.includes(order.status));
+  const totalRevenueCents = revenueOrders.reduce((sum, order) => sum + order.totalCents, 0);
+  const orderCount = revenueOrders.length;
+  const averageOrderCents = orderCount > 0 ? Math.round(totalRevenueCents / orderCount) : 0;
+
+  const ordersByChannel = { POS: 0, MOBILE: 0 };
+  for (const order of revenueOrders) {
+    ordersByChannel[order.channel] += 1;
+  }
+
+  const today = todayDateString();
+  const canteenMealsDistributedToday = mealUsages.filter((usage) => usage.date === today).length;
+
+  const wasteMovements = stockMovements.filter((movement) => movement.type === "WASTE");
+  const stockWasteCount = wasteMovements.length;
+  // Valorisation au prix catalogue actuel — estimation, pas un chiffre
+  // comptable officiel (voir DirectionKpi.stockWasteEstimatedValueCents).
+  const stockWasteEstimatedValueCents = wasteMovements.reduce((sum, movement) => {
+    const stockItem = stockItems.find((item) => item.id === movement.stockItemId);
+    const product = stockItem ? products.find((candidate) => candidate.id === stockItem.productId) : undefined;
+    if (!product) return sum;
+    return sum + Math.abs(movement.quantityDelta) * product.priceCents;
+  }, 0);
+
+  // Même logique de filtrage que handleGetStockAlerts (W8).
+  const lowStockAlertsCount = stockItems.filter((item) => item.quantityOnHand <= item.lowStockThreshold).length;
+
+  return {
+    ok: true,
+    data: {
+      totalRevenueCents,
+      orderCount,
+      averageOrderCents,
+      ordersByChannel,
+      ordersByPaymentMethod: null,
+      canteenMealsDistributedToday,
+      stockWasteCount,
+      stockWasteEstimatedValueCents,
+      lowStockAlertsCount,
+    },
+  };
+}
+
 const ORDER_DETAIL_PATTERN = /^\/api\/v1\/orders\/([^/]+)$/;
 const ORDER_TRANSITION_PATTERN = /^\/api\/v1\/orders\/([^/]+)\/transition$/;
 
@@ -1307,6 +1366,8 @@ const mockHandlers: Record<string, MockHandler> = {
 
   "GET /api/v1/promotions": handleGetPromotions,
   "POST /api/v1/promotions": handleCreatePromotion,
+
+  "GET /api/v1/direction/kpi": handleGetDirectionKpi,
 };
 
 export function resolveMock<T>(path: string, options?: RequestInit): ApiResult<T> {

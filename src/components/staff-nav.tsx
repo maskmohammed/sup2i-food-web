@@ -185,6 +185,7 @@ const navItems: {
     label: "Direction",
     href: "/direction",
     section: "direction",
+    implemented: true,
     icon: (
       <NavIcon>
         <path d="M3 3v18h18" />
