@@ -20,25 +20,25 @@ Le backend Spring Boot + PostgreSQL est l'unique source de vérité métier. Le 
 
 - Ne jamais coder directement sur `main`.
 - Ne jamais connecter le navigateur/Next.js directement à PostgreSQL.
-- Ne jamais accepter comme vérité un total/prix/stock calculé côté client — le serveur revalide toujours, promotions incluses.
+- Ne jamais accepter comme vérité un total/prix/stock calculé côté client — le serveur revalide toujours.
 - Ne jamais implémenter une transition d'état absente de la state machine des commandes.
 - Décider le comportement UI avec `error.code`, jamais avec le texte `message`.
 - Bloquer le double clic/double soumission sur toute action critique.
 - Après une action critique réussie, toujours rafraîchir l'état depuis le serveur.
 - KDS n'affiche jamais une commande non payée.
 - Ne jamais inventer un endpoint sans le marquer explicitement comme mock/proposition.
-- Ne jamais accéder à une éventuelle DB Cactus/PHP directement, ni supposer son schéma.
-- Ne jamais affirmer qu'une étape est "DONE" sans avoir réellement exécuté lint/typecheck/tests/build ET testé en conditions réelles.
+- Ne jamais accéder à une éventuelle DB Cactus/PHP directement, ni supposer son schéma. **Cactus = framework PHP maison de l'école, système de caisse existant à auditer en W13.**
+- Ne jamais affirmer qu'une étape est "DONE" sans avoir réellement exécuté lint/build ET testé en conditions réelles.
 - Prix stockés en centimes, jamais en float.
 - Le total d'un panier/commande vient toujours d'un round-trip serveur.
 - Une impression échouée n'est jamais traitée comme un paiement échoué.
-- Ne jamais inventer un mapping/champ sans donnée réelle disponible — dire explicitement "non calculable" plutôt que fabriquer une valeur (règle confirmée en W12 sur les KPI).
-- Ne jamais utiliser "profit"/"bénéfice net" nulle part dans le code ou l'UI — toute valorisation de stock/gaspillage doit être explicitement labellisée "estimation".
-- Dans toute rangée avec du texte tronqué : vérifier que TOUTES les colonnes fixes combinées ne dépassent jamais la largeur disponible avant de blâmer la colonne flexible — un badge/bouton supplémentaire conditionnel peut faire déborder une grille qui semblait correcte (bug réel rencontré en W12 : la cause était un manque d'espace total, pas la classe flex-1 elle-même). Préférer un layout multi-lignes (wrap) dès qu'une ligne combine nom + plusieurs badges/actions.
-- Toute règle métier bloquante doit être vérifiée UI ET serveur.
-- La photo étudiante n'est jamais modifiable depuis Cantine.
-- Toute page Administration/Stock/Catalogue/Direction sensible doit être enveloppée par `RequireRole`.
-- Les mocks sont en mémoire uniquement — un F5/nouvel onglet réinitialise l'état, c'est attendu, pas un bug.
+- Ne jamais inventer un mapping/champ/donnée sans base réelle — dire "non calculable"/"non disponible" plutôt que fabriquer.
+- Ne jamais utiliser "profit"/"bénéfice net" — valorisation stock/gaspillage toujours labellisée "estimation".
+- Dans toute rangée avec texte tronqué : vérifier que toutes les colonnes fixes combinées ne dépassent jamais la largeur disponible (préférer un layout multi-lignes si nom+badges+actions se combinent).
+- Toute règle métier bloquante vérifiée UI ET serveur.
+- Toute page sensible enveloppée par `RequireRole`.
+- Les mocks sont en mémoire uniquement — F5/nouvel onglet réinitialise l'état, c'est attendu.
+- Toute mutation critique (paiement notamment) doit être idempotente côté client via une clé générée avant l'appel, réutilisée si retry après échec réseau — pattern posé en W14 anticipé sur le POS, à généraliser si besoin.
 
 ---
 
@@ -59,28 +59,27 @@ git checkout -b feature/web-<nom-etape>
 ## 3. Méthode de travail — une étape à la fois
 
 1. Expliquer le but, proposer les commandes exactes.
-2. Vérification visuelle EN CONDITIONS RÉELLES (clics effectifs, pas lecture de code seule), deux thèmes, F5.
+2. Vérification EN CONDITIONS RÉELLES, deux thèmes, F5.
 3. Lint/build OK.
 4. Commit → push → merge vers `develop`.
 5. Mise à jour `CURRENT_STATUS`.
 6. Étape suivante seulement après validation explicite.
 
-Étapes larges découpées en sous-étapes.
-
-**Méthode de debug (rodée en W12)** : quand un bug visuel persiste malgré du code source vérifié correct — (1) purger `.next` et redémarrer `npm run dev`, (2) ajouter un `console.log` temporaire pour confirmer que la donnée est correcte au runtime, (3) si la donnée est bonne, inspecter le DOM réel via DevTools (onglet Computed/Styles) plutôt que de continuer à deviner dans le code — ça révèle la vraie cause (ex. une grille qui manque d'espace total) bien plus vite que d'itérer sur des hypothèses.
+**Méthode de debug** (rodée en W12) : bug visuel qui persiste malgré code vérifié correct → (1) purger `.next` + redémarrer, (2) `console.log` temporaire pour confirmer la donnée au runtime, (3) si donnée correcte, inspecter le DOM réel via DevTools (Computed/Styles) plutôt que deviner dans le code.
 
 ---
 
 ## 4. Roadmap W0 → W14
 
-- **W0 à W12** ✅ TOUS TERMINÉS.
-  - W0 Audit repo, W1 Shell/Design/RBAC, W2 API/Auth/Erreurs, W3 Catalogue, W4 Orders, W5 POS MVP, W6 KDS, W7 Rush/Clôture/Matériel, W8 Inventory/Waste, W9 Cantine/Food Pass, W10 Administration, W11 Snack/Promotions (scanner branché, TODO W7 fermé), W12 Direction/Finance (KPI honnêtes, aucun "profit").
-- **W13 — Cactus / Matériel — audit d'intégration** *(prochaine étape, dépend de facteurs externes)* : dès que code Cactus et matériel réel (scanner, imprimante, TPE) sont disponibles.
-- **W14 — Hardening / Pilote** : E2E, sécurité, perf, a11y, résilience réseau, staging, pilote.
+- **W0 à W12** ✅ TOUS TERMINÉS (voir historique : shell/design, auth/API, catalogue, orders, POS, KDS, stock, cantine, administration, promotions/scanner, direction/finance).
+- **Portion de W14 anticipée** ✅ : simulation de panne réseau (`network-simulator.ts`, toggle dev), timeout réel 8s en mode live, clé d'idempotence sur le paiement POS pour éviter les doubles commandes en cas de retry réseau.
+- **W13 — Cactus / Matériel — audit d'intégration** — **BLOQUÉE, en attente d'accès externe** : nécessite le code source du framework Cactus (PHP, développé par l'école) et le matériel physique du système de caisse existant (scanner, imprimante, TPE). Pas un choix de priorisation — Hamza n'a pas encore cet accès.
+- **W14 — Hardening / Pilote** *(partiellement anticipé, reste à faire)* : E2E, a11y, reste de la résilience réseau si besoin, staging, pilote.
 
-**W13 et W14 ne dépendent plus uniquement du rythme de développement** — W13 nécessite un accès au code Cactus/PHP existant et au matériel physique (scanner réel, imprimante réelle, TPE), que Hamza n'a pas encore. En attendant, il est possible de :
-- Continuer à durcir/tester ce qui existe déjà (W14 anticipé partiellement : tests E2E, a11y, résilience réseau sur les mocks).
-- Attendre que le Dev Backend avance sur les 43 endpoints OpenAPI cibles pour commencer à remplacer les mocks par de vrais appels (`NEXT_PUBLIC_API_MODE=live`).
+Options pour la suite tant que W13 reste bloquée :
+- Continuer W14 : accessibilité (a11y) sur les écrans existants, tests E2E des flux mock.
+- Attendre l'avancement du Dev Backend sur les 43 endpoints OpenAPI pour commencer à basculer `NEXT_PUBLIC_API_MODE` vers `"live"` module par module.
+- Faire le point avec l'équipe (Dev Backend, Dev Mobile) sur l'accès à Cactus/matériel.
 
 ---
 
@@ -112,26 +111,23 @@ git checkout -b feature/web-<nom-etape>
 
 **Design / layout (W1)** — `roles.ts`, `role-context.tsx`, `theme-toggle.tsx`, `staff-nav.tsx`, `states/*`, `app/(staff)/layout.tsx`, `require-role.tsx` (W10).
 
-**API / Auth (W2)** — `client.ts`, `mocks/index.ts`, `error-messages.ts`, `auth-context.tsx` (100% mock).
+**API / Auth (W2, résilience W14)** — `client.ts` (timeout 8s live, injection de panne mock), `mocks/index.ts`, `error-messages.ts` (`NETWORK_ERROR` inclus), `auth-context.tsx` (100% mock), `network-simulator.ts`, `network-failure-toggle.tsx` (toggle dev dans le header staff).
 
 **Catalogue (W3, enrichi W11)** — `catalogue-types.ts` (barcode, options, Promotion), `administration/catalogue/page.tsx`, `administration/promotions/page.tsx`.
 
 **Orders (W4)** — `orders-types.ts`, `orders/page.tsx`, `orders/[id]/page.tsx`.
 
-**POS (W5-W7, enrichi W11)** — `pos-types.ts`, `pos/page.tsx` (session, panier, paiement, Rush, clôture, impression, **scanner branché**), `close-session-panel.tsx`, `hardware/scanner.ts`, `printer.ts`.
+**POS (W5-W7, enrichi W11, idempotent W14)** — `pos-types.ts`, `pos/page.tsx` (session, panier, paiement avec clé d'idempotence générée/réutilisée par panier, Rush, clôture, impression, scanner branché), `close-session-panel.tsx`, `hardware/scanner.ts`, `printer.ts`.
 
 **KDS (W6)** — `use-order-transition.ts`, `kds/page.tsx`.
 
-**Inventaire (W8, layout corrigé W12)** — `inventory-types.ts`, `stock/page.tsx` (layout deux-lignes pour éviter tout débordement nom+badges+boutons), `dashboard/stock-alerts-card.tsx`.
+**Inventaire (W8, layout corrigé W12)** — `inventory-types.ts`, `stock/page.tsx` (layout deux-lignes anti-débordement), `dashboard/stock-alerts-card.tsx`.
 
 **Cantine (W9)** — `canteen-types.ts`, `cantine/page.tsx`.
 
-**Administration (W10)** — `students-types.ts`, `administration/students/page.tsx`, `admin-types.ts`, `administration/users/page.tsx`, `administration/audit/page.tsx` (8 actions tracées).
+**Administration (W10)** — `students-types.ts`, `administration/students/page.tsx`, `admin-types.ts`, `administration/users/page.tsx`, `administration/audit/page.tsx`.
 
-**Direction (W12)**
-- `src/lib/api/direction-types.ts` — `DirectionKpi`.
-- `src/app/(staff)/direction/page.tsx` — CA, panier moyen, commandes par canal, repas cantine du jour, alertes stock, gaspillage (compte + valeur "estimation", jamais "bénéfice"). Gardée par `RequireRole` (DIRECTION, FINANCE, SYSTEM_ADMIN).
-- `ordersByPaymentMethod` : non calculable (le mode de paiement n'est pas persisté sur `Order`) — carte omise plutôt qu'inventée, documenté dans le code.
+**Direction (W12)** — `direction-types.ts`, `direction/page.tsx` (KPI honnêtes, `ordersByPaymentMethod` omis car non calculable).
 
 ---
 
@@ -141,30 +137,25 @@ git checkout -b feature/web-<nom-etape>
 Project: SUP2I FOOD
 Repo: sup2i-food-web (GitHub: maskmohammed/sup2i-food-web, privé)
 Base branch: develop
-Working branch: (aucune — W0 à W12 tous mergés, W13 en attente de matériel/accès Cactus)
-Current milestone: W12 — Direction / Finance ✅ TERMINÉ. W0 à W12 COMPLETS.
+Working branch: (aucune — dernière branche mergée: feature/web-network-resilience)
+Current milestone: W0-W12 complets + portion résilience réseau de W14 anticipée. W13 BLOQUÉE (accès Cactus/matériel manquant).
 Completed:
-- W0-W11: voir historique
-- W12: dashboard KPI Direction/Finance, agrégation honnête, gaspillage jamais présenté comme profit — mergé sur develop
-- Bug résolu en cours de route: débordement de grille sur /stock (nom+badge+boutons), corrigé en layout deux-lignes
+- W0-W12: voir historique
+- Résilience réseau (W14 anticipé): simulation de panne dev, timeout réel 8s, clé d'idempotence POS — mergé sur develop
 Validated:
 - lint: OK
 - build: OK
 Backend dependencies:
 - ready: PostgreSQL/Flyway opérationnels
-- pending: JWT/RBAC réel, endpoints métier (43 paths cibles, pas tous implémentés), accès code Cactus/PHP, matériel réel (scanner/imprimante/TPE)
+- pending: JWT/RBAC réel, 43 endpoints OpenAPI (partiels), accès code Cactus (PHP, framework école), matériel réel (scanner/imprimante/TPE)
 Open decisions:
-- W13 (Cactus/matériel) est BLOQUÉE en attente d'accès externe — pas un choix de priorisation
-- Auth actuelle 100% mock
-- ORDER_TRANSITIONS / ORDER_TRANSITION_ROLES sont des propositions frontend
-- Commande POS créée directement en PAID (pas d'AWAITING_PAYMENT)
-- KDS en polling (6s)
-- Déduction automatique de stock au PREPARING non connectée (vente POS n'affecte pas /stock)
-- ordersByPaymentMethod non calculable (paymentMethod non persisté sur Order)
-- Acteur de l'audit log = placeholder générique
+- W13 BLOQUÉE — dépend de l'accès à Cactus et au matériel physique, pas du rythme de dev
+- Idempotence POS: nom de champ (idempotencyKey en body) proposé, convention REST standard serait un header Idempotency-Key — à confirmer avec Dev Backend
+- Scénario "serveur a réussi mais réponse perdue" non testable avec les mocks actuels — mécanisme de déduplication en place mais jamais éprouvé en conditions réelles de perte réseau
+- Auth 100% mock; ORDER_TRANSITIONS propositions frontend; POS crée en PAID direct; KDS en polling; déduction stock au PREPARING non connectée; ordersByPaymentMethod non calculable; acteur audit = placeholder
 Next exact action:
-- Si accès Cactus/matériel disponible : démarrer W13 (audit d'intégration)
-- Sinon : anticiper W14 sur ce qui ne dépend pas du matériel — tests E2E des flux mock existants, accessibilité (a11y), résilience réseau (comportement de l'app si les endpoints mock échouent), ou attendre l'avancement du Dev Backend pour commencer à basculer NEXT_PUBLIC_API_MODE vers "live" module par module
+- Si accès Cactus/matériel obtenu: démarrer W13
+- Sinon: continuer W14 — accessibilité (a11y) des écrans existants, ou tests E2E des flux mock, ou attendre avancement Dev Backend pour basculer NEXT_PUBLIC_API_MODE vers "live" module par module
 ```
 
 *(Ce bloc doit être mis à jour à chaque étape validée.)*
