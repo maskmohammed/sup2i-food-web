@@ -368,10 +368,18 @@ function PosWorkspace({
   const [checkoutError, setCheckoutError] = useState<ApiError | null>(null);
   const [createdOrder, setCreatedOrder] = useState<CreatedOrder | null>(null);
 
+  // Une clé par tentative de paiement, renvoyée à l'identique sur un
+  // retry (le mock déduplique) pour ne jamais créer deux commandes si la
+  // réponse d'un premier essai s'est perdue après un succès serveur.
+  // Réinitialisée quand le panier change (nouvelle tentative logique) ou
+  // après un paiement réussi.
+  const idempotencyKeyRef = useRef<string | null>(null);
+
   const [closePanelOpen, setClosePanelOpen] = useState(false);
 
   function applyCartChange(next: CartLine[]) {
     setCart(next);
+    idempotencyKeyRef.current = null;
     if (next.length === 0) {
       setPricing(null);
       setPricingError(null);
@@ -499,21 +507,29 @@ function PosWorkspace({
   async function submitPayment(method: PaymentMethod) {
     if (checkoutSubmitting) return;
 
+    if (!idempotencyKeyRef.current) {
+      idempotencyKeyRef.current = crypto.randomUUID();
+    }
+
     setCheckoutSubmitting(true);
     setCheckoutError(null);
 
     const result = await apiFetch<CreatedOrder>("/api/v1/pos/orders", {
       method: "POST",
-      body: JSON.stringify({ items: cart, paymentMethod: method }),
+      body: JSON.stringify({ items: cart, paymentMethod: method, idempotencyKey: idempotencyKeyRef.current }),
     });
 
     setCheckoutSubmitting(false);
 
     if (!result.ok) {
       setCheckoutError(result.error);
+      // La clé reste inchangée : un "Confirmer"/retry renverra la même
+      // valeur, permettant au mock de dédupliquer si la commande avait en
+      // fait réussi côté serveur avant que la réponse ne se perde.
       return;
     }
 
+    idempotencyKeyRef.current = null;
     setCreatedOrder(result.data);
     setCheckoutOpen(false);
     setPaymentMethod(null);

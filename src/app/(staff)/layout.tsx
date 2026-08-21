@@ -4,6 +4,7 @@ import { useEffect, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { RoleProvider } from "@/lib/role-context";
 import { RoleSwitcher } from "@/components/role-switcher";
+import { NetworkFailureToggle } from "@/components/network-failure-toggle";
 import { StaffNav } from "@/components/staff-nav";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { LoadingState } from "@/components/states/loading-state";
@@ -56,6 +57,7 @@ export default function StaffLayout({ children }: { children: ReactNode }) {
             </div>
             <div className="flex items-center gap-3">
               <RoleSwitcher />
+              <NetworkFailureToggle />
               <ThemeToggle />
               <button
                 type="button"

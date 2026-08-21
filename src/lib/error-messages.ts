@@ -16,6 +16,7 @@ export const ERROR_MESSAGES: Record<string, string> = {
   VALIDATION_ERROR: "Certaines informations saisies sont invalides — vérifiez le nom, le prix et la catégorie.",
   SESSION_ALREADY_OPEN: "Une session de caisse est déjà ouverte.",
   SUBSCRIPTION_INACTIVE: "Abonnement Food Pass inactif — distribution bloquée.",
+  NETWORK_ERROR: "Impossible de contacter le serveur. Vérifiez votre connexion.",
 };
 
 export const DEFAULT_ERROR_MESSAGE = "Une erreur est survenue.";

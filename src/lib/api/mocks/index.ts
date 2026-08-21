@@ -1042,7 +1042,13 @@ function nextOrderCode(): string {
   return `A-${max + 1}`;
 }
 
-type PosOrderRequestBody = { items?: unknown; paymentMethod?: unknown };
+type PosOrderRequestBody = { items?: unknown; paymentMethod?: unknown; idempotencyKey?: unknown };
+
+// Clé d'idempotence → résultat déjà produit. Proposition frontend : le nom
+// du champ (idempotencyKey en body, plutôt qu'un header Idempotency-Key
+// plus conventionnel côté REST) est à confirmer avec le Dev Backend. Pas
+// d'expiration/nettoyage ici — mock en mémoire, se réinitialise au reload.
+const processedPosOrderKeys = new Map<string, CreatedOrder>();
 
 /**
  * Simplification MVP : un paiement CASH/TPE encaissé passe directement en
@@ -1059,6 +1065,18 @@ function handleCreatePosOrder(options?: RequestInit): ApiResult<CreatedOrder> {
   }
 
   const body = parseJsonBody<PosOrderRequestBody>(options);
+  const idempotencyKey = typeof body?.idempotencyKey === "string" ? body.idempotencyKey : null;
+
+  if (idempotencyKey) {
+    const alreadyProcessed = processedPosOrderKeys.get(idempotencyKey);
+    if (alreadyProcessed) {
+      // Retry d'une tentative déjà traitée (ex. réponse perdue après un
+      // succès serveur) : on renvoie le même résultat, jamais une
+      // deuxième commande.
+      return { ok: true, data: alreadyProcessed };
+    }
+  }
+
   const paymentMethod: PaymentMethod | null =
     body?.paymentMethod === "CASH" || body?.paymentMethod === "CARD" ? body.paymentMethod : null;
 
@@ -1095,17 +1113,20 @@ function handleCreatePosOrder(options?: RequestInit): ApiResult<CreatedOrder> {
     sessionCardSalesCents += newOrder.totalCents;
   }
 
-  return {
-    ok: true,
-    data: {
-      id: newOrder.id,
-      code: newOrder.code,
-      items: priced.data.items,
-      totalCents: newOrder.totalCents,
-      paymentMethod,
-      paidAt,
-    },
+  const createdOrder: CreatedOrder = {
+    id: newOrder.id,
+    code: newOrder.code,
+    items: priced.data.items,
+    totalCents: newOrder.totalCents,
+    paymentMethod,
+    paidAt,
   };
+
+  if (idempotencyKey) {
+    processedPosOrderKeys.set(idempotencyKey, createdOrder);
+  }
+
+  return { ok: true, data: createdOrder };
 }
 
 function handleSessionSummary(): ApiResult<CashSessionSummary> {
