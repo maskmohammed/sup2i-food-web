@@ -70,6 +70,8 @@ git checkout -b feature/web-<nom-etape>
 
 **Méthode d'audit** (rodée en W14 a11y) : avant de corriger un problème transversal (accessibilité, sécurité), demander d'abord un audit complet listant les vrais gaps par catégorie (avec preuves — grep, calculs, mesures), distinguer les faux positifs, faire valider le périmètre avant de corriger.
 
+**Méthode E2E** (rodée en W14) : les mocks vivent en mémoire dans le processus du serveur de dev. `page.goto()` dans un test Playwright déclenche une vraie navigation navigateur qui recharge la page — si un test crée une donnée sur une page puis va vérifier sur une autre via `page.goto()`, l'état mock est perdu. Utiliser la navigation client-side (cliquer un `<Link>` du site, pas `page.goto()`) pour préserver l'état entre deux étapes d'un même test.
+
 ---
 
 ## 4. Roadmap W0 → W14
@@ -78,14 +80,15 @@ git checkout -b feature/web-<nom-etape>
 - **Portions de W14 anticipées** ✅ :
   - Résilience réseau : simulation de panne (toggle dev), timeout réel 8s, clé d'idempotence sur le paiement POS.
   - Accessibilité : `aria-label` sur champs Cantine/Users, `role="alert"`/`aria-live` sur error-state/loading-state, `focus-visible` global cohérent, `<h2>` pour les sous-sections manquantes (stock/catalogue/promotions/students). Contrastes de 3 couleurs de statut (`alert`, `ready`, `accent-warm`) sous le seuil WCAG AA texte normal — **non corrigés, limite connue à trancher avec l'équipe/design**.
-- **W13 — Cactus / Matériel — audit d'intégration** — **BLOQUÉE, en attente d'accès externe** au code Cactus (PHP, école) et au matériel physique (scanner, imprimante, TPE).
-- **W14 — reste à faire** : tests E2E des flux mock, correction éventuelle des contrastes (décision à prendre), staging, pilote.
+  - Tests E2E : Playwright, 8 tests sur 6 flux critiques (auth, pos-sale, orders-transition, stock-adjustment, cantine-distribution, role-guard). Commande : `npm run test:e2e`. KDS/promotions/direction/users/students volontairement non couverts pour l'instant.
+- **W13 — Cactus / Matériel — audit d'intégration** — **BLOQUÉE, en attente d'accès externe** au code Cactus (PHP, école) et au matériel physique (scanner, imprimante, TPE). **Hamza fournira le code Cactus quand il l'aura — pas de blocage du reste du travail en attendant, on continue W14 en parallèle.**
+- **W14 — reste à faire** : étendre la couverture E2E si utile, correction éventuelle des contrastes (décision à prendre), staging, pilote.
 
 Options pour la suite tant que W13 reste bloquée :
-- Tests E2E des flux mock existants.
+- Étendre les tests E2E aux flux non couverts (KDS, promotions, direction, users, students).
 - Décider avec l'équipe si les 3 contrastes signalés doivent être corrigés (ajusterait la palette v3).
 - Attendre l'avancement du Dev Backend sur les 43 endpoints OpenAPI pour basculer `NEXT_PUBLIC_API_MODE` vers `"live"` module par module.
-- Point d'équipe sur l'accès Cactus/matériel.
+- Dès que Hamza fournit le code Cactus : démarrer immédiatement W13.
 
 ---
 
@@ -139,6 +142,8 @@ Options pour la suite tant que W13 reste bloquée :
 
 **Direction (W12)** — `direction-types.ts`, `direction/page.tsx`.
 
+**Tests E2E (W14)** — `e2e/helpers/auth.ts` (login/setRole réutilisables), `e2e/auth.spec.ts`, `e2e/pos-sale.spec.ts`, `e2e/orders-transition.spec.ts`, `e2e/stock-adjustment.spec.ts`, `e2e/cantine-distribution.spec.ts`, `e2e/role-guard.spec.ts`, `playwright.config.ts` (chromium seul, `fullyParallel: true`, `webServer` auto-lance `npm run dev`).
+
 ---
 
 ## 8. CURRENT_STATUS
@@ -147,27 +152,30 @@ Options pour la suite tant que W13 reste bloquée :
 Project: SUP2I FOOD
 Repo: sup2i-food-web (GitHub: maskmohammed/sup2i-food-web, privé)
 Base branch: develop
-Working branch: (aucune — dernière branche mergée: feature/web-a11y)
-Current milestone: W0-W12 complets + résilience réseau + accessibilité (portions W14 anticipées). W13 BLOQUÉE (accès Cactus/matériel manquant).
+Working branch: (aucune — dernière branche mergée: feature/web-e2e-tests)
+Current milestone: W0-W12 complets + résilience réseau + accessibilité + tests E2E (portions W14). W13 BLOQUÉE (Hamza fournira le code Cactus quand disponible).
 Completed:
 - W0-W12: voir historique
 - Résilience réseau (W14 anticipé): simulation de panne, timeout 8s, idempotence POS — mergé
 - Accessibilité (W14 anticipé): focus-visible global, aria-labels, live regions, h2 manquants — mergé
+- Tests E2E (W14 anticipé): Playwright, 8 tests, 6 flux critiques — mergé. Commande: npm run test:e2e
 Validated:
 - lint: OK
 - build: OK
+- e2e: 8/8 passing
 Backend dependencies:
 - ready: PostgreSQL/Flyway opérationnels
 - pending: JWT/RBAC réel, 43 endpoints OpenAPI (partiels), accès code Cactus, matériel réel
 Open decisions:
-- W13 BLOQUÉE — dépend de l'accès externe, pas du rythme de dev
+- W13 en pause — Hamza apportera le code Cactus quand il l'aura ; le reste du travail continue sans attendre
 - 3 contrastes de couleur (alert/ready/accent-warm comme texte) sous seuil WCAG AA — décision à prendre : corriger la palette ou accepter la limite
 - Idempotence POS: nom de champ à confirmer avec Dev Backend (body vs header Idempotency-Key)
 - Scénario "serveur a réussi mais réponse perdue" non testable avec mocks actuels
+- Piège E2E: page.goto() réinitialise les mocks en mémoire — toujours naviguer via <Link> client-side entre deux étapes d'un même test qui partagent un état créé en cours de test
 - Auth 100% mock; ORDER_TRANSITIONS propositions frontend; POS crée en PAID direct; KDS en polling; déduction stock au PREPARING non connectée; ordersByPaymentMethod non calculable; acteur audit = placeholder
 Next exact action:
-- Si accès Cactus/matériel obtenu: démarrer W13
-- Sinon: tests E2E des flux mock, ou décision d'équipe sur les contrastes, ou attendre avancement Dev Backend pour NEXT_PUBLIC_API_MODE="live"
+- Quand Hamza fournit le code Cactus: démarrer W13
+- En attendant: étendre la couverture E2E (KDS/promotions/direction/users/students), ou décision d'équipe sur les contrastes, ou attendre avancement Dev Backend pour NEXT_PUBLIC_API_MODE="live"
 ```
 
 *(Ce bloc doit être mis à jour à chaque étape validée.)*
