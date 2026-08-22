@@ -161,6 +161,8 @@ export default function PromotionsPage() {
         </form>
 
         <div className="mt-8">
+          <h2 className="mb-3 text-sm font-semibold text-text">Promotions actives</h2>
+
           {promoStatus === "loading" ? <LoadingState label="Chargement des promotions..." /> : null}
 
           {promoStatus === "error" && promoError ? (

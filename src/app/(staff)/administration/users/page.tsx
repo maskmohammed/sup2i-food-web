@@ -108,6 +108,7 @@ export default function UsersPage() {
                         value={user.role}
                         onChange={(event) => handleRoleChange(user, event.target.value as Role)}
                         disabled={pendingId === user.id}
+                        aria-label={`Rôle de ${user.name}`}
                         className="rounded-md border border-border bg-surface px-2 py-1.5 text-sm text-text outline-none focus:border-brand disabled:opacity-50"
                       >
                         {ROLES.map((role) => (

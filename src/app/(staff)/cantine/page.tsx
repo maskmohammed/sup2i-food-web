@@ -119,6 +119,7 @@ export default function CantinePage() {
           value={code}
           onChange={(event) => setCode(event.target.value)}
           placeholder="Code Food Pass"
+          aria-label="Code Food Pass"
           autoFocus
           className="min-w-0 flex-1 rounded-md border border-border bg-surface px-3 py-2 text-sm text-text font-mono outline-none focus:border-brand"
         />

@@ -6,6 +6,7 @@ export function LoadingState({ label = "Chargement..." }: LoadingStateProps) {
   return (
     <div
       role="status"
+      aria-live="polite"
       className="flex flex-col items-center justify-center gap-3 rounded-lg border border-border bg-surface-raised py-10 text-center"
     >
       <span

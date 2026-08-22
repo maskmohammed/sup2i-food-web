@@ -392,7 +392,7 @@ export default function StockPage() {
 
       {status === "success" && alertItems.length > 0 ? (
         <div className="mt-4 rounded-lg border border-status-alert/40 bg-status-alert/5 p-4">
-          <p className="text-sm font-semibold text-status-alert">Alertes stock bas ({alertItems.length})</p>
+          <h2 className="text-sm font-semibold text-status-alert">Alertes stock bas ({alertItems.length})</h2>
           <ul className="mt-2 flex flex-col gap-1">
             {alertItems.map((item) => (
               <li

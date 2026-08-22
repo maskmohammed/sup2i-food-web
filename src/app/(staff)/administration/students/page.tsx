@@ -222,6 +222,8 @@ export default function StudentsPage() {
         ) : null}
 
         <div className="mt-8">
+          <h2 className="mb-3 text-sm font-semibold text-text">Liste des étudiants</h2>
+
           {status === "loading" ? <LoadingState label="Chargement des étudiants..." /> : null}
 
           {status === "error" && error ? (

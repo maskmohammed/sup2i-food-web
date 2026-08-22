@@ -9,7 +9,11 @@ type ErrorStateProps = {
 
 export function ErrorState({ code, traceId, children }: ErrorStateProps) {
   return (
-    <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-status-alert/40 bg-status-alert/5 py-10 text-center">
+    <div
+      role="alert"
+      aria-live="assertive"
+      className="flex flex-col items-center justify-center gap-2 rounded-lg border border-status-alert/40 bg-status-alert/5 py-10 text-center"
+    >
       <svg
         aria-hidden
         viewBox="0 0 24 24"

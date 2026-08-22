@@ -178,6 +178,8 @@ export default function CataloguePage() {
         ) : null}
 
         <div className="mt-8">
+          <h2 className="mb-3 text-sm font-semibold text-text">Produits</h2>
+
           {status === "loading" ? <LoadingState label="Chargement du catalogue..." /> : null}
 
           {status === "error" && error ? (

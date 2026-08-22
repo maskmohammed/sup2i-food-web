@@ -45,3 +45,20 @@
   --font-sans: var(--font-ibm-plex-sans);
   --font-mono: var(--font-ibm-plex-mono);
 }
+
+/*
+ * Anneau de focus visible au clavier uniquement (:focus-visible, jamais
+ * au clic souris) — cohérent sur tous les éléments interactifs, dans les
+ * deux thèmes (--brand est identique clair/sombre). N'affecte jamais le
+ * :focus existant des inputs (couleur de bordure) : propriété différente
+ * (outline), purement additif.
+ */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
