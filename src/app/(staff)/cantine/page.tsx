@@ -162,7 +162,7 @@ export default function CantinePage() {
                 <p className="truncate text-base font-semibold text-text">{lookupResult.student.fullName}</p>
                 <p
                   className={`text-sm ${
-                    lookupResult.subscriptionActive ? "text-status-ready" : "text-status-alert"
+                    lookupResult.subscriptionActive ? "text-status-ready-text" : "text-status-alert-text"
                   }`}
                 >
                   {lookupResult.subscriptionActive ? "Abonnement actif" : "Abonnement inactif"}
@@ -171,7 +171,7 @@ export default function CantinePage() {
             </div>
 
             {!lookupResult.subscriptionActive ? (
-              <p className="mt-3 rounded-md border border-status-alert/40 bg-status-alert/5 px-3 py-2 text-sm text-status-alert">
+              <p className="mt-3 rounded-md border border-status-alert/40 bg-status-alert/5 px-3 py-2 text-sm text-status-alert-text">
                 Distribution bloquée — abonnement inactif.
               </p>
             ) : null}
@@ -203,7 +203,7 @@ export default function CantinePage() {
             </div>
 
             {distributeSuccess ? (
-              <p className="mt-3 rounded-md border border-status-ready/40 bg-status-ready/5 px-3 py-2 text-sm text-status-ready">
+              <p className="mt-3 rounded-md border border-status-ready/40 bg-status-ready/5 px-3 py-2 text-sm text-status-ready-text">
                 {MEAL_TYPE_LABELS[distributeSuccess]} distribué avec succès.
               </p>
             ) : null}

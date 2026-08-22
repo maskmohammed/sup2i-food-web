@@ -258,8 +258,8 @@ export default function StudentsPage() {
                         <span
                           className={`flex-none whitespace-nowrap rounded-full border px-2 py-0.5 text-xs ${
                             student.subscriptionActive
-                              ? "border-status-ready text-status-ready"
-                              : "border-status-alert text-status-alert"
+                              ? "border-status-ready text-status-ready-text"
+                              : "border-status-alert text-status-alert-text"
                           }`}
                         >
                           {student.subscriptionActive ? "Actif" : "Inactif"}

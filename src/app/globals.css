@@ -14,6 +14,20 @@
   --status-preparing: #2db4c7;
   --status-ready: #22c55e;
   --status-alert: #ef4444;
+
+  /*
+   * Variantes "texte" des couleurs de statut/accent ci-dessus, distinctes
+   * des tokens décoratifs (pastilles, bordures, icônes — seuil 3:1, déjà
+   * respecté par les valeurs d'origine). Une seule valeur ne peut pas
+   * satisfaire 4.5:1 dans les deux thèmes à la fois (assombrir pour le
+   * clair rendrait la couleur trop sombre pour le fond sombre, et
+   * inversement) — d'où des valeurs différentes par thème, même famille de
+   * teinte. Ratios calculés contre --surface-raised (le cas le plus dur
+   * dans chaque thème) : voir CLAUDE_PROJECT.md §6.
+   */
+  --status-alert-text: #b91c1c;
+  --status-ready-text: #166534;
+  --accent-warm-text: #c2410c;
 }
 
 :root[data-theme="dark"] {
@@ -25,6 +39,10 @@
   --text-muted: #a9b7cc;
   --brand: #b01552;
   --accent-warm: #e8542a;
+
+  --status-alert-text: #fca5a5;
+  --status-ready-text: #4ade80;
+  --accent-warm-text: #fdba74;
 }
 
 @theme inline {
@@ -41,6 +59,10 @@
   --color-status-preparing: var(--status-preparing);
   --color-status-ready: var(--status-ready);
   --color-status-alert: var(--status-alert);
+
+  --color-status-alert-text: var(--status-alert-text);
+  --color-status-ready-text: var(--status-ready-text);
+  --color-accent-warm-text: var(--accent-warm-text);
 
   --font-sans: var(--font-ibm-plex-sans);
   --font-mono: var(--font-ibm-plex-mono);

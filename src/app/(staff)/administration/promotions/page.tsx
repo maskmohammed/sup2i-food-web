@@ -205,7 +205,7 @@ export default function PromotionsPage() {
                       disabled={pendingId === promotion.id}
                       className={`flex-none whitespace-nowrap rounded-full border px-3 py-1 text-xs transition-colors disabled:opacity-50 ${
                         promotion.active
-                          ? "border-status-ready text-status-ready"
+                          ? "border-status-ready text-status-ready-text"
                           : "border-border text-text-muted"
                       }`}
                     >

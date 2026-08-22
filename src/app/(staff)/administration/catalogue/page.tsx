@@ -221,8 +221,8 @@ export default function CataloguePage() {
                           disabled={pendingId === product.id}
                           className={`whitespace-nowrap rounded-full border px-2 py-0.5 text-xs transition-colors disabled:opacity-50 ${
                             product.available
-                              ? "border-status-ready text-status-ready"
-                              : "border-status-alert text-status-alert"
+                              ? "border-status-ready text-status-ready-text"
+                              : "border-status-alert text-status-alert-text"
                           }`}
                         >
                           {pendingId === product.id

@@ -221,7 +221,7 @@ function SessionClosedRecap({ recap, onContinue }: { recap: ClosureRecap; onCont
             <dt className="text-text-muted">Écart</dt>
             <dd
               className={`font-mono font-semibold ${
-                recap.closure.differenceCents === 0 ? "text-text" : "text-status-alert"
+                recap.closure.differenceCents === 0 ? "text-text" : "text-status-alert-text"
               }`}
             >
               {differenceLabel}
@@ -325,7 +325,7 @@ function TicketScreen({
         </button>
 
         {printStatus === "error" && printError ? (
-          <p className="mt-2 text-center text-xs text-status-alert">
+          <p className="mt-2 text-center text-xs text-status-alert-text">
             {getErrorMessage(printError.code)} — le paiement reste validé.
           </p>
         ) : null}
@@ -557,7 +557,7 @@ function PosWorkspace({
             disabled={checkoutSubmitting}
             className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors disabled:opacity-50 ${
               rushMode
-                ? "border-accent-warm bg-accent-warm/10 text-accent-warm"
+                ? "border-accent-warm bg-accent-warm/10 text-accent-warm-text"
                 : "border-border bg-surface-raised text-text-muted hover:text-text"
             }`}
           >
@@ -604,7 +604,7 @@ function PosWorkspace({
                   </span>
                   <span className="font-mono text-sm text-text-muted">{formatPrice(product.priceCents)}</span>
                   {!product.available ? (
-                    <span className="text-xs text-status-alert">Indisponible</span>
+                    <span className="text-xs text-status-alert-text">Indisponible</span>
                   ) : null}
                 </button>
               ))}

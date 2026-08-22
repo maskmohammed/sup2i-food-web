@@ -8,7 +8,7 @@ export function RoleSwitcher() {
 
   return (
     <div className="flex items-center gap-2">
-      <span className="rounded-full border border-accent-warm px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent-warm">
+      <span className="rounded-full border border-accent-warm px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent-warm-text">
         Mode dev
       </span>
       <select

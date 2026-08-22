@@ -357,7 +357,7 @@ function MovementHistory({ itemId }: { itemId: string }) {
                 </div>
                 <span
                   className={`flex-none font-mono text-sm ${
-                    movement.quantityDelta < 0 ? "text-status-alert" : "text-text"
+                    movement.quantityDelta < 0 ? "text-status-alert-text" : "text-text"
                   }`}
                 >
                   {movement.quantityDelta > 0 ? "+" : ""}
@@ -392,7 +392,7 @@ export default function StockPage() {
 
       {status === "success" && alertItems.length > 0 ? (
         <div className="mt-4 rounded-lg border border-status-alert/40 bg-status-alert/5 p-4">
-          <h2 className="text-sm font-semibold text-status-alert">Alertes stock bas ({alertItems.length})</h2>
+          <h2 className="text-sm font-semibold text-status-alert-text">Alertes stock bas ({alertItems.length})</h2>
           <ul className="mt-2 flex flex-col gap-1">
             {alertItems.map((item) => (
               <li
@@ -461,7 +461,7 @@ export default function StockPage() {
 
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         {lowStock ? (
-                          <span className="flex-none whitespace-nowrap rounded-full border border-status-alert px-2 py-0.5 text-xs text-status-alert">
+                          <span className="flex-none whitespace-nowrap rounded-full border border-status-alert px-2 py-0.5 text-xs text-status-alert-text">
                             Stock bas
                           </span>
                         ) : (

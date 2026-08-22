@@ -21,7 +21,7 @@ export function NetworkFailureToggle() {
       title="Simuler des pannes réseau (mode dev)"
       className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide transition-colors ${
         active
-          ? "border-status-alert bg-status-alert/10 text-status-alert"
+          ? "border-status-alert bg-status-alert/10 text-status-alert-text"
           : "border-border text-text-muted hover:text-text"
       }`}
     >
