@@ -4,7 +4,7 @@ import { login } from "./helpers/auth";
 test("wrong password shows an error and stays on /login", async ({ page }) => {
   await page.goto("/login");
   await page.getByLabel("Identifiant").fill("e2e-test");
-  await page.getByLabel("Mot de passe").fill("wrong");
+  await page.getByLabel("Mot de passe", { exact: true }).fill("wrong");
   await page.getByRole("button", { name: "Se connecter" }).click();
 
   // error-state a role="alert" (voir a11y W14) — annoncé, et repérable sans sélecteur CSS.

@@ -112,6 +112,7 @@ const navItems: {
     label: "Administration",
     href: "/administration",
     section: "administration",
+    implemented: true,
     icon: (
       <NavIcon>
         <circle cx="12" cy="12" r="3" />

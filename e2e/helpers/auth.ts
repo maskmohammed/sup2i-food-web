@@ -10,7 +10,10 @@ import type { Page } from "@playwright/test";
 export async function login(page: Page, identifiant = "e2e-test"): Promise<void> {
   await page.goto("/login");
   await page.getByLabel("Identifiant").fill(identifiant);
-  await page.getByLabel("Mot de passe").fill("e2e-password");
+  // exact: true — le bouton afficher/masquer porte un aria-label
+  // "Afficher le mot de passe" qui contiendrait sinon "Mot de passe" en
+  // sous-chaîne (match par défaut de getByLabel).
+  await page.getByLabel("Mot de passe", { exact: true }).fill("e2e-password");
   await page.getByRole("button", { name: "Se connecter" }).click();
   await page.waitForURL("/dashboard");
 }
